@@ -21,8 +21,8 @@ Prerequisites
 Quickstart
 1. Clone the repository
    ```
-   git clone https://github.com/SameepSB/azure-rag-infra.git
-   cd azure-rag-infra
+   git clone https://github.com/SameepSB/rag-infra.git
+   cd rag-infra
    ```
 2. Review variables and backend configuration in `terraform/` (or the repo's infra folder)
 3. Authenticate to Azure:
