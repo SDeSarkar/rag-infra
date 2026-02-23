@@ -1,30 +1,20 @@
+variable "location" { type = string default = "eastus" }
+variable "project"  { type = string default = "agentic-rag" }
+variable "env"      { type = string default = "dev" }
 
-variable "subscription_id" {
+variable "tags" {
+  type    = map(string)
+  default = {}
+}
+
+# Container image for your FastAPI/LangGraph service
+variable "container_image" {
   type        = string
-  description = "Azure subscription ID"
+  description = "e.g., ghcr.io/your-org/agent-api:0.1.0"
 }
 
-variable "resource_group_name" {
-  type        = string
-  description = "Resource group name"
-  default     = "rg-agentic-rag"
+# Optional: lock down public ingress later
+variable "containerapp_external_ingress" {
+  type    = bool
+  default = true
 }
-
-variable "location" {
-  type        = string
-  description = "Azure region (e.g., eastus, westus2)"
-  default     = "eastus"
-}
-
-variable "name_prefix" {
-  type        = string
-  description = "Short prefix for resource names"
-  default     = "rag"
-}
-
-variable "enable_private_endpoints" {
-  type        = bool
-  description = "Set to true to create VNet + private endpoints for AOAI and AI Search"
-  default     = false
-}
-# All Variables
