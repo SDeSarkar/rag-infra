@@ -1,14 +1,14 @@
-variable "location" { 
-  type = string 
-  default = "South India" 
+variable "location" {
+  type    = string
+  default = "South India"
 }
-variable "project"  { 
-  type = string 
-  default = "agentic-rag" 
+variable "project" {
+  type    = string
+  default = "agentic-rag"
 }
-variable "env" { 
-  type = string 
-  default = "dev" 
+variable "env" {
+  type    = string
+  default = "dev"
 }
 
 variable "tags" {

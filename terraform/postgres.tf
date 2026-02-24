@@ -11,9 +11,9 @@ resource "azurerm_postgresql_flexible_server" "pg" {
   administrator_login    = "pgadminuser"
   administrator_password = random_password.pg_admin.result
 
-  version      = "16"
-  sku_name     = "B_Standard_B1ms"
-  storage_mb   = 32768
+  version    = "16"
+  sku_name   = "B_Standard_B1ms"
+  storage_mb = 32768
 
   # MVP: public. Production: private access only.
   public_network_access_enabled = true
