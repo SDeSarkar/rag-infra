@@ -1,12 +1,10 @@
 name: terraform-plan
 
 on:
+  workflow_dispatch: {}
   pull_request:
-    branches: ["main"]
-    paths:
-      - "infra/**"
-      - ".github/workflows/terraform-*.yml"
-
+    branches: ["azure-mvp"]
+    
 permissions:
   id-token: write
   contents: read
