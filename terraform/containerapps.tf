@@ -64,21 +64,54 @@ resource "azurerm_container_app" "api" {
       memory = "2Gi"
 
       # Pass non-secret config directly; secrets should be pulled from Key Vault by the app using Managed Identity.
-      env { name = "AZURE_SEARCH_ENDPOINT" value = "https://${azurerm_search_service.search.name}.search.windows.net" }
-      env { name = "AZURE_OPENAI_ENDPOINT" value = azurerm_cognitive_account.openai.endpoint }
+      env { 
+         name = "AZURE_SEARCH_ENDPOINT" 
+         value = "https://${azurerm_search_service.search.name}.search.windows.net" 
+      }
+      env { 
+         name = "AZURE_OPENAI_ENDPOINT" 
+         value = azurerm_cognitive_account.openai.endpoint 
+      }
 
-      env { name = "POSTGRES_HOST" value = azurerm_postgresql_flexible_server.pg.fqdn }
-      env { name = "POSTGRES_DB" value = azurerm_postgresql_flexible_server_database.agent.name }
-      env { name = "POSTGRES_USER" value = azurerm_postgresql_flexible_server.pg.administrator_login }
+      env { 
+         name = "POSTGRES_HOST" 
+         value = azurerm_postgresql_flexible_server.pg.fqdn 
+      }
+      env { 
+         name = "POSTGRES_DB" 
+         value = azurerm_postgresql_flexible_server_database.agent.name 
+      }
+      env { 
+         name = "POSTGRES_USER" 
+         value = azurerm_postgresql_flexible_server.pg.administrator_login 
+      }
 
-      env { name = "REDIS_HOST" value = azurerm_redis_cache.redis.hostname }
-      env { name = "REDIS_SSL_PORT" value = tostring(azurerm_redis_cache.redis.ssl_port) }
+      env { 
+         name = "REDIS_HOST" 
+         value = azurerm_redis_cache.redis.hostname 
+      }
+      env { 
+         name = "REDIS_SSL_PORT" 
+         value = tostring(azurerm_redis_cache.redis.ssl_port) 
+      }
 
       # Tell the app which Key Vault + secret names to fetch at runtime
-      env { name = "KEYVAULT_URI" value = azurerm_key_vault.kv.vault_uri }
-      env { name = "KV_SECRET_SEARCH_ADMIN_KEY" value = azurerm_key_vault_secret.search_admin_key.name }
-      env { name = "KV_SECRET_PG_PASSWORD" value = azurerm_key_vault_secret.pg_password.name }
-      env { name = "KV_SECRET_REDIS_KEY" value = azurerm_key_vault_secret.redis_key.name }
+      env { 
+         name = "KEYVAULT_URI" 
+         value = azurerm_key_vault.kv.vault_uri 
+      }
+      env { 
+         name = "KV_SECRET_SEARCH_ADMIN_KEY" 
+         value = azurerm_key_vault_secret.search_admin_key.name 
+      }
+      env { 
+         name = "KV_SECRET_PG_PASSWORD" 
+         value = azurerm_key_vault_secret.pg_password.name 
+      }
+      env { 
+         name = "KV_SECRET_REDIS_KEY" 
+         value = azurerm_key_vault_secret.redis_key.name 
+      }
     }
   }
 
