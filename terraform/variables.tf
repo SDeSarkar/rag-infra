@@ -1,6 +1,15 @@
-variable "location" { type = string default = "eastus" }
-variable "project"  { type = string default = "agentic-rag" }
-variable "env"      { type = string default = "dev" }
+variable "location" { 
+  type = string 
+  default = "South India" 
+}
+variable "project"  { 
+  type = string 
+  default = "agentic-rag" 
+}
+variable "env" { 
+  type = string 
+  default = "dev" 
+}
 
 variable "tags" {
   type    = map(string)
