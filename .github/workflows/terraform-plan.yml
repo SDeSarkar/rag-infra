@@ -3,12 +3,15 @@ name: terraform-plan
 on:
   workflow_dispatch: {}
   pull_request:
-    branches: ["azure-mvp"]
-    
+    branches: ["main"]
+    paths:
+      - "terraform/**"
+      - ".github/workflows/terraform-plan.yml"
+
 permissions:
   id-token: write
   contents: read
-  pull-requests: write
+  pull-requests: read
 
 jobs:
   plan:
@@ -16,11 +19,14 @@ jobs:
     defaults:
       run:
         working-directory: terraform
+
     env:
+      # Use Azure OIDC auth for the azurerm provider
       ARM_USE_OIDC: "true"
       ARM_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
       ARM_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
-      ARM_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}       
+      ARM_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+      TF_IN_AUTOMATION: "true"
 
     steps:
       - name: Checkout
@@ -38,25 +44,29 @@ jobs:
         with:
           terraform_version: "1.7.5"
 
-      - name: Terraform Init (azurerm backend)
+      - name: Terraform Init
         run: |
           terraform init \
             -backend-config="resource_group_name=${{ secrets.TFSTATE_RG }}" \
             -backend-config="storage_account_name=${{ secrets.TFSTATE_SA }}" \
             -backend-config="container_name=${{ secrets.TFSTATE_CONTAINER }}" \
-            -backend-config="key=${{ github.repository }}-${{ github.base_ref }}.tfstate"
+            -backend-config="key=${{ github.repository }}-main.tfstate"
 
       - name: Terraform Format Check
-        run: terraform fmt -check -recursive
+        run: terraform fmt -check -diff -recursive
 
       - name: Terraform Validate
         run: terraform validate
 
-      - name: Terraform Plan
+      - name: Terraform Plan (uses placeholder image if TF_CONTAINER_IMAGE not set)
         run: |
-          terraform plan \
-            -no-color \
-            -var="location=eastus" \
-            -var="project=agentic-rag" \
-            -var="env=dev" \
-            -var="container_image=ghcr.io/<your-org>/<your-image>:<tag>"
+          IMAGE="${{ vars.TF_CONTAINER_IMAGE }}"
+          if [ -z "$IMAGE" ]; then
+            IMAGE="nginx:latest"
+          fi
+
+          terraform plan -no-color \
+            -var="location=${{ vars.TF_LOCATION }}" \
+            -var="project=${{ vars.TF_PROJECT }}" \
+            -var="env=${{ vars.TF_ENV }}" \
+            -var="container_image=$IMAGE"
