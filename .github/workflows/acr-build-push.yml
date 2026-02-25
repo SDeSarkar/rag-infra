@@ -1,0 +1,69 @@
+name: acr-build-push
+
+on:
+  workflow_dispatch: {}
+  push:
+    branches: ["main"]
+    paths:
+      - "app/**"
+      - "Dockerfile"
+      - "requirements.txt"
+      - ".github/workflows/acr-build-push.yml"
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  build_push:
+    runs-on: ubuntu-latest
+    env:
+      ARM_USE_OIDC: "true"
+      ARM_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+      ARM_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+      ARM_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+      TF_IN_AUTOMATION: "true"
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Azure Login (OIDC)
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Setup Terraform (to read outputs)
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: "1.7.5"
+
+      - name: Terraform Init (read outputs)
+        working-directory: terraform
+        run: |
+          terraform init \
+            -backend-config="resource_group_name=${{ secrets.TFSTATE_RG }}" \
+            -backend-config="storage_account_name=${{ secrets.TFSTATE_SA }}" \
+            -backend-config="container_name=${{ secrets.TFSTATE_CONTAINER }}" \
+            -backend-config="key=${{ github.repository }}-main.tfstate"
+
+      - name: Read ACR login server from Terraform output
+        id: tfout
+        working-directory: terraform
+        run: |
+          ACR_LOGIN_SERVER="$(terraform output -raw acr_login_server)"
+          echo "acr_login_server=$ACR_LOGIN_SERVER" >> "$GITHUB_OUTPUT"
+
+      - name: Docker login to ACR
+        run: |
+          ACR_NAME="$(echo '${{ steps.tfout.outputs.acr_login_server }}' | cut -d. -f1)"
+          az acr login --name "$ACR_NAME"
+
+      - name: Build and push image
+        run: |
+          IMAGE="${{ steps.tfout.outputs.acr_login_server }}/agent-api:${{ github.sha }}"
+          docker build -t "$IMAGE" .
+          docker push "$IMAGE"
+          echo "Pushed: $IMAGE"
