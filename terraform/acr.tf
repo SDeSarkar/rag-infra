@@ -4,7 +4,7 @@ resource "azurerm_container_registry" "acr" {
   location            = azurerm_resource_group.rg.location
 
   sku           = "Basic"
-  admin_enabled = true # MVP. Production: prefer Managed Identity + AcrPull.
+  admin_enabled = false # MVP. Production: prefer Managed Identity + AcrPull.
 
   tags = var.tags
 }
