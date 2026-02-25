@@ -7,8 +7,11 @@ resource "azurerm_redis_cache" "redis" {
   sku_name = "Basic"
   capacity = 0
 
-  enable_non_ssl_port = false
   minimum_tls_version = "1.2"
+
+  # OPTIONAL: redis_configuration block if you need it (leave empty otherwise)
+  # redis_configuration {
+  # }
 
   tags = var.tags
 }
