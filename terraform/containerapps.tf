@@ -112,6 +112,10 @@ resource "azurerm_container_app" "api" {
         name  = "KV_SECRET_REDIS_KEY"
         value = azurerm_key_vault_secret.redis_key.name
       }
+      env {
+        name  = "APPLICATIONINSIGHTS_CONNECTION_STRING"
+        value = azurerm_application_insights.ai.connection_string
+      }
     }
   }
 
