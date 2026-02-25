@@ -42,7 +42,8 @@ resource "azurerm_container_app" "api" {
     type         = "UserAssigned"
     identity_ids = [azurerm_user_assigned_identity.api.id]
   }
-  
+
+  # Pull images from ACR using the container app's managed identity (no passwords)
   registry {
     server   = azurerm_container_registry.acr.login_server
     identity = azurerm_user_assigned_identity.api.id
@@ -68,11 +69,12 @@ resource "azurerm_container_app" "api" {
       cpu    = 1.0
       memory = "2Gi"
 
-      # Pass non-secret config directly; secrets should be pulled from Key Vault by the app using Managed Identity.
+      # Non-secret config
       env {
         name  = "AZURE_SEARCH_ENDPOINT"
         value = "https://${azurerm_search_service.search.name}.search.windows.net"
       }
+
       env {
         name  = "AZURE_OPENAI_ENDPOINT"
         value = azurerm_cognitive_account.openai.endpoint
@@ -82,10 +84,12 @@ resource "azurerm_container_app" "api" {
         name  = "POSTGRES_HOST"
         value = azurerm_postgresql_flexible_server.pg.fqdn
       }
+
       env {
         name  = "POSTGRES_DB"
         value = azurerm_postgresql_flexible_server_database.agent.name
       }
+
       env {
         name  = "POSTGRES_USER"
         value = azurerm_postgresql_flexible_server.pg.administrator_login
@@ -95,28 +99,34 @@ resource "azurerm_container_app" "api" {
         name  = "REDIS_HOST"
         value = azurerm_redis_cache.redis.hostname
       }
+
       env {
         name  = "REDIS_SSL_PORT"
         value = tostring(azurerm_redis_cache.redis.ssl_port)
       }
 
-      # Tell the app which Key Vault + secret names to fetch at runtime
+      # Key Vault references (app fetches secrets at runtime using managed identity)
       env {
         name  = "KEYVAULT_URI"
         value = azurerm_key_vault.kv.vault_uri
       }
+
       env {
         name  = "KV_SECRET_SEARCH_ADMIN_KEY"
         value = azurerm_key_vault_secret.search_admin_key.name
       }
+
       env {
         name  = "KV_SECRET_PG_PASSWORD"
         value = azurerm_key_vault_secret.pg_password.name
       }
+
       env {
         name  = "KV_SECRET_REDIS_KEY"
         value = azurerm_key_vault_secret.redis_key.name
       }
+
+      # App Insights
       env {
         name  = "APPLICATIONINSIGHTS_CONNECTION_STRING"
         value = azurerm_application_insights.ai.connection_string
@@ -124,5 +134,9 @@ resource "azurerm_container_app" "api" {
     }
   }
 
-  depends_on = [azurerm_key_vault_access_policy.api]
+  # Ensure the container app identity can read Key Vault and pull from ACR before create/update
+  depends_on = [
+    azurerm_key_vault_access_policy.api,
+    azurerm_role_assignment.api_acr_pull
+  ]
 }
