@@ -42,6 +42,11 @@ resource "azurerm_container_app" "api" {
     type         = "UserAssigned"
     identity_ids = [azurerm_user_assigned_identity.api.id]
   }
+  
+  registry {
+    server   = azurerm_container_registry.acr.login_server
+    identity = azurerm_user_assigned_identity.api.id
+  }
 
   ingress {
     external_enabled = var.containerapp_external_ingress
