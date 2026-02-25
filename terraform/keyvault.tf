@@ -1,7 +1,17 @@
 data "azurerm_client_config" "current" {}
 
+locals {
+  # Key Vault names must be 3-24 chars, globally unique, and use a restricted charset.
+  # This generates a short, lowercase, dashless name and truncates to 24 chars.
+  kv_name = substr(
+    lower(replace("${var.project}${var.env}kv${random_string.suffix.result}", "-", "")),
+    0,
+    24
+  )
+}
+
 resource "azurerm_key_vault" "kv" {
-  name                = "${var.project}-${var.env}-kv-${random_string.suffix.result}"
+  name                = local.kv_name
   resource_group_name = azurerm_resource_group.rg.name
   location            = azurerm_resource_group.rg.location
 
