@@ -15,18 +15,18 @@ resource "azurerm_storage_account" "sa" {
 
 resource "azurerm_storage_container" "raw_docs" {
   name                  = "raw-docs"
-  storage_account_name  = azurerm_storage_account.sa.name
+  storage_account_name  = azurerm_storage_account.sa.id
   container_access_type = "private"
 }
 
 resource "azurerm_storage_container" "code_snapshots" {
   name                  = "code-snapshots"
-  storage_account_name  = azurerm_storage_account.sa.name
+  storage_account_name  = azurerm_storage_account.sa.id
   container_access_type = "private"
 }
 
 resource "azurerm_storage_container" "etl_artifacts" {
   name                  = "etl-artifacts"
-  storage_account_name  = azurerm_storage_account.sa.name
+  storage_account_name  = azurerm_storage_account.sa.id
   container_access_type = "private"
 }
