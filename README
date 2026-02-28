@@ -59,3 +59,82 @@ This project is licensed under the MIT License — see the LICENSE file for deta
 
 Contact
 For questions about this repository, open an issue or contact the repository owner: [SameepSB](https://github.com/SameepSB).
+
+
+Step 1 >
+==============
+
+# Login
+az login
+az account show
+SUBSCRIPTION_ID=$(az account show --query id -o tsv)
+
+# Variables
+RG_NAME="<your-bootstrap-rg-or-any-rg>"
+LOCATION="eastus"
+APP_NAME="gh-oidc-terraform-${RANDOM}"
+
+# Create an AAD app + service principal
+az ad app create --display-name "$APP_NAME" > app.json
+APP_ID=$(cat app.json | jq -r .appId)
+
+az ad sp create --id "$APP_ID"
+SP_OBJECT_ID=$(az ad sp show --id "$APP_ID" --query id -o tsv)
+
+TENANT_ID=$(az account show --query tenantId -o tsv)
+
+# Assign permissions (Contributor at subscription scope for MVP; tighten later)
+az role assignment create \
+  --assignee "$APP_ID" \
+  --role "Contributor" \
+  --scope "/subscriptions/$SUBSCRIPTION_ID"
+
+# Create federated credential for GitHub Actions on your repo/branch
+az ad app federated-credential create \
+  --id "$APP_ID" \
+  --parameters "{
+    \"name\": \"github-main\",
+    \"issuer\": \"https://token.actions.githubusercontent.com\",
+    \"subject\": \"repo:<GITHUB_OWNER>/<GITHUB_REPO>:ref:refs/heads/main\",
+    \"audiences\": [\"api://AzureADTokenExchange\"]
+  }" 
+
+Step2 
+=============
+Add GitHub repo secrets received from previous steps 
+In your GitHub repo → Settings → Secrets and variables → Actions → New repository secret:
+AZURE_CLIENT_ID
+AZURE_TENANT_ID
+AZURE_SUBSCRIPTION_ID
+
+Step 3 
+===============
+az login
+az account set --subscription "<SUBSCRIPTION_ID>"
+
+az provider register --namespace Microsoft.App
+az provider register --namespace Microsoft.OperationalInsights
+az provider register --namespace Microsoft.ContainerService
+
+Step 4 
+============
+SUB="<SUBSCRIPTION_ID>"
+SP_APP_ID="<AZURE_CLIENT_ID>"   # the same client id used in GitHub secrets
+
+SP_OBJECT_ID=$(az ad sp show --id "$SP_APP_ID" --query id -o tsv)
+
+# Choose ONE of the following:
+
+# (A) Recommended: User Access Administrator at subscription (lets it manage role assignments)
+az role assignment create \
+  --assignee-object-id "$SP_OBJECT_ID" \
+  --assignee-principal-type ServicePrincipal \
+  --role "User Access Administrator" \
+  --scope "/subscriptions/$SUB"
+
+# (B) Alternative: Owner at subscription (broader)
+# az role assignment create \
+#   --assignee-object-id "$SP_OBJECT_ID" \
+#   --assignee-principal-type ServicePrincipal \
+#   --role "Owner" \
+#   --scope "/subscriptions/$SUB"
