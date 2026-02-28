@@ -10,6 +10,7 @@ The current deployment represents a robust, production-ready foundation for an *
 | Resource Name (Deployed) | Azure Service Type | Role in Architecture |
 | :--- | :--- | :--- |
 | `agentic-rag-dev-api` | **Azure Container App** | Hosts the Agentic logic, Planner, and API layer. |
+| `agentic-rag-dev-cae` | **Azure Container Apps Environment** | secure, isolated boundary where one or more Azure Container Apps and jobs run. |
 | `agentic-rag-dev-openai` | **Azure OpenAI** | Provides LLM (GPT-4o/O1) and Embedding models. |
 | `agentic-rag-dev-search` | **Azure AI Search** | Acts as the Vector Database for document retrieval. |
 | `agentic-rag-dev-pg` | **Azure Database for PostgreSQL** | Stores structured data and long-term metadata. |
