@@ -1,4 +1,4 @@
-# Architecture Specification: Migration from AWS/OSS to Azure Cloud
+# Architecture Specification: Comparison AWS/OSS Vs Azure Cloud
 **Focus:** Enterprise RAG (Retrieval-Augmented Generation) with Multi-Agent Orchestration
 
 ---
