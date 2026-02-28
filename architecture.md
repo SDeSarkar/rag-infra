@@ -34,7 +34,7 @@ Instead of managing separate "Document Loaders" and "Graph Extraction" pods:
 
 ### B. The "Multi-Sub Agent" Brain
 * **Orchestrator:** Use the **Semantic Kernel** or **LangChain** frameworks.
-* **Hosting:** Deploy the "Planner" and "Agents" as microservices on **Azure Container Apps (ACA)**. This allows for serverless scaling without the complexity of managing a full K8s control plane, though **AKS** remains an option if you require deep cluster-level control.
+* **Hosting:** Deploy the "Planner" and "Agents" as microservices on **Azure Container Apps (ACA)**. This allows for serverless scaling without the complexity of managing a full K8s control plane, though **AKS** remains an option if required deep cluster-level control.
 * **Model Serving:** Replace vLLM with **Azure OpenAI**. This provides a private, high-availability endpoint for GPT models without managing GPU drivers.
 
 ### C. API Services & Security
@@ -49,8 +49,8 @@ Instead of managing separate "Document Loaders" and "Graph Extraction" pods:
 ---
 
 ## 4. Infrastructure as Code (IaC)
-Since you currently use **Terraform**, the migration path involves:
-1. **Provider:** Switch from `aws` to `azurerm`.
+Use of **Terraform**, the migration path involves:
+1. **Provider:**  `azurerm`.
 2. **Resource Modules:**
     * `azurerm_cognitive_account` (for OpenAI)
     * `azurerm_search_service` (for AI Search)
