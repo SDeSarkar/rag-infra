@@ -4,7 +4,7 @@
 ---
 
 ## 1. High-Level Mapping
-This architecture transitions from a Kubernetes-heavy, self-hosted stack to a **Managed PaaS** model on Azure, reducing operational overhead for the "Infrastructure Architect" while maintaining strict private networking.
+This architecture transitions from a Kubernetes-heavy, self-hosted stack to a **Managed PaaS** model on Azure, reducing operational overhead  while maintaining strict private networking.
 
 | Function | Original Stack (Image) | Azure Native Stack |
 | :--- | :--- | :--- |
