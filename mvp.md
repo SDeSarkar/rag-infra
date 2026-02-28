@@ -22,18 +22,18 @@ The current deployment represents a robust, production-ready foundation for an *
 ---
 
 ## 3. Architectural Strengths
-* **Identity-Based Security:** Using **Managed Identities** is an excellent choice for an Infrastructure Architect; it eliminates the need for hardcoded service principal secrets.
-* **Stateful Orchestration:** The inclusion of **Redis** ensures that your "Multi-Sub Agents" can maintain context across long-running or multi-turn conversations.
-* **Observability:** You have already integrated **Application Insights**, which is critical for debugging the non-deterministic nature of LLM chains.
+* **Identity-Based Security:** Using **Managed Identities** is an excellent choice ; it eliminates the need for hardcoded service principal secrets.
+* **Stateful Orchestration:** The inclusion of **Redis** ensures the "Multi-Sub Agents" can maintain context across long-running or multi-turn conversations.
+* **Observability:** Already integrated **Application Insights**, which is critical for debugging the non-deterministic nature of LLM chains.
 
 ---
 
-## 4. Recommended Next Steps (Post-MVP)
+## 4. Next Steps (Post-MVP)
 
 ### Infrastructure Hardening
-* **Virtual Network (VNet) Integration:** Bind these services to a private VNet to ensure the "Private Network" requirement from the original design is fully realized.
-* **API Management (APIM):** Add an APIM layer to handle external consumer auth and specialized LLM policies (like token-based rate limiting).
+* **Virtual Network (VNet) Integration:** To me used  Bind these services to a private VNet to ensure the "Private Network" requirement from the original design is fully realized.
+* **API Management (APIM):** Adding an APIM layer to handle external consumer auth and specialized LLM policies (like token-based rate limiting).
 
 ### Development Readiness
-* **Deployment Automation:** Since you are an IT Infrastructure Architect with **Terraform** experience, ensure these resources are defined in a module for rapid replication into `stage` or `prod` environments.
-* **Evaluation Framework:** Use the deployed **Azure AI Studio** tools to measure the "Groundedness" of your RAG responses before moving beyond the dev phase.
+* **Deployment Automation:** These resources are defined in a module for rapid replication into `stage` or `prod` environments.
+* **Evaluation Framework:** **Azure AI Studio** tools to measure the "Groundedness" of the RAG responses before moving beyond the dev phase.
