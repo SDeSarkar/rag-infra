@@ -81,11 +81,136 @@ F2 --> F1
 
 G1 --> G2
 ```
+## Layered Architecture
+```mermaid
+flowchart TB
+
+subgraph L1["Layer 1: Presentation"]
+    UI1["SRE UI"]
+    UI2["Engineering UI"]
+end
+
+subgraph L2["Layer 2: Access"]
+    ID1["Entra ID"]
+end
+
+subgraph L3["Layer 3: Agents and API"]
+    AG1["SRE Agent"]
+    AG2["Engineering Agent"]
+    AG3["RAG Service"]
+    AG4["Sandbox Executor"]
+end
+
+subgraph L4["Layer 4: Data"]
+    D1["Blob Storage"]
+    D2["AI Search"]
+    D3["PostgreSQL"]
+    D4["Redis Cache"]
+end
+
+subgraph L5["Layer 5: AI Compute"]
+    AI1["Azure OpenAI"]
+end
+
+subgraph L6["Layer 6: Security"]
+    S1["Key Vault"]
+    S2["Managed Identity"]
+end
+
+UI1 --> ID1
+UI2 --> ID1
+
+ID1 --> AG1
+ID1 --> AG2
+
+AG1 --> AG3
+AG2 --> AG3
+AG1 --> AG4
+AG2 --> AG4
+
+AG1 --> AI1
+AG2 --> AI1
+AG1 --> D2
+AG2 --> D2
+
+AG1 --> D3
+AG2 --> D3
+
+AG1 --> D4
+AG2 --> D4
+
+AG3 --> D2
+
+D1 --> AG3
+
+S2 --> AG1
+S2 --> AG2
+S2 --> AG3
+S2 --> S1
+```
 
 
+## Scquence Daigram 
+```mermaid
+sequenceDiagram
+    autonumber
 
+    participant U as User
+    participant UI as UI
+    participant API as Agent API
+    participant CACHE as Redis Cache
+    participant SEARCH as AI Search
+    participant AOAI as Azure OpenAI
+    participant PG as PostgreSQL
 
+    U->>UI: Ask question
+    UI->>API: POST /rag/ask
 
+    API->>CACHE: Check cache
+    alt Cache Hit
+        CACHE-->>API: Return cached answer
+        API-->>UI: Send cached response
+        UI-->>U: Display answer
+    else Cache Miss
+        API->>AOAI: Generate embedding
+        AOAI-->>API: Embedding vector
+
+        API->>SEARCH: Vector search
+        SEARCH-->>API: Relevant chunks
+
+        API->>AOAI: Ask LLM with context
+        AOAI-->>API: Final answer
+
+        API->>PG: Store session history
+        API->>CACHE: Store semantic cache
+
+        API-->>UI: Final answer + sources
+        UI-->>U: Display answer
+    end
+```
+
+## SRE agent workflow 
+
+```mermaid
+flowchart TD
+
+U["User Query"] --> P["Planner"]
+
+P --> R1["Runbook Search"]
+P --> R2["Postmortem Search"]
+P --> R3["Generate Kusto Query"]
+P --> R4["Execute Kusto in Sandbox"]
+
+R1 --> P
+R2 --> P
+R3 --> P
+R4 --> P
+
+P --> F["Final Answer"]
+
+F --> U
+```
+``
 
 
 
