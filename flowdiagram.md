@@ -1,6 +1,8 @@
 
 ```mermaid
+
 flowchart TD
+
 classDef dark fill=#1e1e1e,stroke=#888,color=#eee;
 classDef node fill=#2b2b2b,stroke=#999,color=#fff;
 classDef accent fill=#004c99,stroke=#66aaff,color=#fff;
