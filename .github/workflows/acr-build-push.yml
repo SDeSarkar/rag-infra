@@ -4,11 +4,6 @@ on:
   workflow_dispatch: {}
   push:
     branches: ["main"]
-    paths:
-      - "app/**"
-      - "Dockerfile"
-      - "requirements.txt"
-      - ".github/workflows/acr-build-push.yml"
 
 permissions:
   id-token: write
@@ -35,10 +30,11 @@ jobs:
           tenant-id: ${{ secrets.AZURE_TENANT_ID }}
           subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
 
-      - name: Setup Terraform (to read outputs)
+      - name: Setup Terraform (read outputs)
         uses: hashicorp/setup-terraform@v3
         with:
           terraform_version: "1.7.5"
+          terraform_wrapper: false
 
       - name: Terraform Init (read outputs)
         working-directory: terraform
@@ -49,21 +45,32 @@ jobs:
             -backend-config="container_name=${{ secrets.TFSTATE_CONTAINER }}" \
             -backend-config="key=${{ github.repository }}-main.tfstate"
 
-      - name: Read ACR login server from Terraform output
+      - name: Read ACR login server
         id: tfout
         working-directory: terraform
         run: |
           ACR_LOGIN_SERVER="$(terraform output -raw acr_login_server)"
           echo "acr_login_server=$ACR_LOGIN_SERVER" >> "$GITHUB_OUTPUT"
 
-      - name: Docker login to ACR
+      - name: Debug — confirm Dockerfile exists
+        run: |
+          echo "=== app/ folder files ==="
+          ls -la app/
+          echo "=== Dockerfile content ==="
+          cat app/Dockerfile || echo "ERROR: app/Dockerfile not found"
+
+      - name: Login to ACR
         run: |
           ACR_NAME="$(echo '${{ steps.tfout.outputs.acr_login_server }}' | cut -d. -f1)"
           az acr login --name "$ACR_NAME"
 
-      - name: Build and push image
+      - name: Build and push
         run: |
           IMAGE="${{ steps.tfout.outputs.acr_login_server }}/agent-api:${{ github.sha }}"
-          docker build -t "$IMAGE" .
+          docker build \
+            -f app/Dockerfile \
+            -t "$IMAGE" \
+            app
           docker push "$IMAGE"
+          echo "IMAGE_TAG=${{ github.sha }}" >> "$GITHUB_ENV"
           echo "Pushed: $IMAGE"
