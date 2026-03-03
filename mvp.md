@@ -3,6 +3,29 @@
 ## 1. Environment Overview
 The current deployment represents a robust, production-ready foundation for an **Agentic Retrieval-Augmented Generation (RAG)** system. It successfully transitions the initial Kubernetes/OSS design into a managed Azure ecosystem.
 
+###Layer 1 — Data Ingestion (ETL)
+  * Upload documents to Blob Storage (raw-docs container)
+  * Chunk + embed documents using Azure OpenAI embeddings
+  * Index chunks into Azure AI Search (vector + keyword index)
+
+###Layer 2 — Retrieval (RAG Core)
+  * Hybrid search: vector similarity + keyword BM25 on AI Search
+  * Rerank results
+  * Build context window from top-k chunks
+
+###Layer 3 — Agent (Agentic layer)
+  * LangGraph or similar agent loop
+  * Tools: Search, Code execution, Postgres query, Redis cache
+  * System prompt + guardrails
+  * Multi-turn conversation memory (Redis or Postgres)
+
+###Layer 4 — API (FastAPI)
+  * POST /chat       — agentic RAG query
+  * POST /ingest     — trigger document ingestion
+  * GET  /health     — liveness probe
+  * GET  /documents  — list indexed documents
+
+
 ---
 
 ## 2. Resource Mapping & Functional Roles
