@@ -1,4 +1,3 @@
-
 resource "azurerm_container_app_environment" "cae" {
   name                       = "${var.project}-${var.env}-cae"
   location                   = azurerm_resource_group.rg.location
@@ -95,6 +94,12 @@ resource "azurerm_container_app" "api" {
       env {
         name  = "REDIS_SSL_PORT"
         value = tostring(azurerm_redis_cache.redis.ssl_port)
+      }
+
+      # Blob Storage (documents container URI)
+      env {
+        name  = "BLOB_URI"
+        value = "https://${azurerm_storage_account.sa.name}.blob.core.windows.net/${azurerm_storage_container.raw_docs.name}"
       }
 
       # Key Vault references (app fetches secrets at runtime using managed identity)
