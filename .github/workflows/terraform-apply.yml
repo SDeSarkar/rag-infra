@@ -2,9 +2,7 @@ name: terraform-apply
 
 on:
   workflow_dispatch: {}
-  workflow_run:
-    workflows: ["acr-build-push"]
-    types: [completed]
+  
 
 permissions:
   id-token: write
