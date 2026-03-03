@@ -1,20 +1,20 @@
 name: terraform-apply
 
 on:
-  workflow_dispatch: {}
-  
+  workflow_dispatch:
+    inputs:
+      container_image:
+        description: "Full ACR image tag to deploy (e.g. agenticragdevq7g5ye.azurecr.io/agent-api:<sha>)"
+        required: false
+        default: ""
 
 permissions:
   id-token: write
   contents: read
 
 jobs:
-  apply:
-    if: ${{ github.event.workflow_run.conclusion == 'success' }}
+  terraform_apply:
     runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: terraform
     env:
       ARM_USE_OIDC: "true"
       ARM_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
@@ -23,11 +23,11 @@ jobs:
       TF_IN_AUTOMATION: "true"
 
     steps:
-      - name: Checkout (same commit that built the image)
+      # ── 1. Checkout ────────────────────────────────────────────────────────
+      - name: Checkout
         uses: actions/checkout@v4
-        with:
-          ref: ${{ github.event.workflow_run.head_sha }}
 
+      # ── 2. Azure Login (OIDC — no client secret needed) ───────────────────
       - name: Azure Login (OIDC)
         uses: azure/login@v2
         with:
@@ -35,12 +35,16 @@ jobs:
           tenant-id: ${{ secrets.AZURE_TENANT_ID }}
           subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
 
+      # ── 3. Setup Terraform ─────────────────────────────────────────────────
       - name: Setup Terraform
         uses: hashicorp/setup-terraform@v3
         with:
           terraform_version: "1.7.5"
+          terraform_wrapper: false
 
+      # ── 4. Terraform Init (remote backend) ────────────────────────────────
       - name: Terraform Init
+        working-directory: terraform
         run: |
           terraform init \
             -backend-config="resource_group_name=${{ secrets.TFSTATE_RG }}" \
@@ -48,20 +52,61 @@ jobs:
             -backend-config="container_name=${{ secrets.TFSTATE_CONTAINER }}" \
             -backend-config="key=${{ github.repository }}-main.tfstate"
 
-      - name: Read ACR login server (for container_image var)
-        id: tfout
+      # ── 5. Resolve container image ─────────────────────────────────────────
+      # If manually supplied → use it.
+      # If not supplied → read latest from ACR (most recently pushed tag).
+      - name: Resolve container image
+        id: image
+        working-directory: terraform
         run: |
-          ACR_LOGIN_SERVER="$(terraform output -raw acr_login_server)"
-          echo "acr_login_server=$ACR_LOGIN_SERVER" >> "$GITHUB_OUTPUT"
+          INPUT_IMAGE="${{ github.event.inputs.container_image }}"
+          if [ -n "$INPUT_IMAGE" ]; then
+            echo "Using provided image: $INPUT_IMAGE"
+            echo "container_image=$INPUT_IMAGE" >> "$GITHUB_OUTPUT"
+          else
+            echo "No image provided — reading acr_login_server from Terraform state..."
+            ACR_LOGIN_SERVER="$(terraform output -raw acr_login_server)"
+            ACR_NAME="$(echo "$ACR_LOGIN_SERVER" | cut -d. -f1)"
+            LATEST_TAG=$(az acr repository show-tags \
+              --name "$ACR_NAME" \
+              --repository agent-api \
+              --orderby time_desc \
+              --top 1 \
+              --output tsv)
+            IMAGE="$ACR_LOGIN_SERVER/agent-api:$LATEST_TAG"
+            echo "Resolved latest image: $IMAGE"
+            echo "container_image=$IMAGE" >> "$GITHUB_OUTPUT"
+          fi
 
-      - name: Terraform Plan (real image)
+      # ── 6. Terraform Plan ──────────────────────────────────────────────────
+      - name: Terraform Plan
+        working-directory: terraform
         run: |
           terraform plan \
+            -var="container_image=${{ steps.image.outputs.container_image }}" \
             -out=tfplan \
-            -var="location=${{ vars.TF_LOCATION }}" \
-            -var="project=${{ vars.TF_PROJECT }}" \
-            -var="env=${{ vars.TF_ENV }}" \
-            -var="container_image=${{ steps.tfout.outputs.acr_login_server }}/agent-api:${{ github.event.workflow_run.head_sha }}"
+            -input=false
 
+      # ── 7. Terraform Apply ─────────────────────────────────────────────────
       - name: Terraform Apply
-        run: terraform apply -auto-approve tfplan
+        working-directory: terraform
+        run: |
+          terraform apply \
+            -input=false \
+            -auto-approve \
+            tfplan
+
+      # ── 8. Print key outputs ──────────────────────────────────────���────────
+      - name: Print Terraform Outputs
+        working-directory: terraform
+        run: |
+          echo "============================================"
+          echo "Container App FQDN:"
+          terraform output -raw container_app_fqdn
+          echo ""
+          echo "ACR Login Server:"
+          terraform output -raw acr_login_server
+          echo ""
+          echo "Image deployed:"
+          echo "${{ steps.image.outputs.container_image }}"
+          echo "============================================"
