@@ -26,9 +26,9 @@ output "aoai_endpoint" {
 }
 
 # ACR
-output "acr_login_server" {
-  value = azurerm_container_registry.acr.login_server
-}
+#output "acr_login_server" {
+#  value = azurerm_container_registry.acr.login_server
+#}
 
 output "acr_admin_username" {
   value     = azurerm_container_registry.acr.admin_username
@@ -51,14 +51,14 @@ output "aca_environment_id" {
   value = azurerm_container_app_environment.cae.id
 }
 
-output "container_app_fqdn" {
-  value = try(azurerm_container_app.api.ingress[0].fqdn, null)
-}
+#output "container_app_fqdn" {
+ # value = try(azurerm_container_app.api.ingress[0].fqdn, null)
+#}
 
 # Data services
-output "postgres_fqdn" {
-  value = azurerm_postgresql_flexible_server.pg.fqdn
-}
+#output "postgres_fqdn" {
+#  value = azurerm_postgresql_flexible_server.pg.fqdn
+#}
 
 output "redis_hostname" {
   value = azurerm_redis_cache.redis.hostname
