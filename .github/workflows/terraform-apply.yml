@@ -87,20 +87,21 @@ jobs:
             -var="container_image=${{ steps.image.outputs.container_image }}" \
             -out=tfplan \
             -input=false
-     # ── Import existing resources that were created outside Terraform ──────
+      # ── Import existing resources that were created outside Terraform ──────
       - name: Terraform Import (idempotent)
         working-directory: terraform
         run: |
           # Import KV MI access policy if not already in state
           terraform state list | grep -q "azurerm_key_vault_access_policy.api_mi" || \
           terraform import \
+            -var="container_image=placeholder" \
             azurerm_key_vault_access_policy.api_mi \
             "/subscriptions/${{ env.ARM_SUBSCRIPTION_ID }}/resourceGroups/agentic-rag-dev-rg/providers/Microsoft.KeyVault/vaults/agenticragdevkvq7g5ye/objectId/8796f439-40f6-4dbc-bfb0-dd1843dfb877"
         env:
           ARM_USE_OIDC: true
           ARM_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
           ARM_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
-          ARM_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}      
+          ARM_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}    
 
       # ── 7. Terraform Apply ─────────────────────────────────────────────────
       - name: Terraform Apply
