@@ -35,7 +35,11 @@ resource "azurerm_key_vault_access_policy" "tf" {
 resource "azurerm_key_vault_access_policy" "api_mi" {
   key_vault_id = azurerm_key_vault.kv.id
   tenant_id    = data.azurerm_client_config.current.tenant_id
-  object_id    = azurerm_user_assigned_identity.api.principal_id  # ← fixed: "api" not "api_mi"
+  object_id    = azurerm_user_assigned_identity.api.principal_id
 
   secret_permissions = ["Get", "List"]
+
+  lifecycle {
+    ignore_changes = all   # ← policy already exists in Azure, skip conflict
+  }
 }
