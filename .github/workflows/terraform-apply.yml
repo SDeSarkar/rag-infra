@@ -79,14 +79,7 @@ jobs:
             echo "container_image=$IMAGE" >> "$GITHUB_OUTPUT"
           fi
 
-      # ── 6. Terraform Plan ──────────────────────────────────────────────────
-      - name: Terraform Plan
-        working-directory: terraform
-        run: |
-          terraform plan \
-            -var="container_image=${{ steps.image.outputs.container_image }}" \
-            -out=tfplan \
-            -input=false
+      
       # ── Import existing resources that were created outside Terraform ──────
       - name: Terraform Import (idempotent)
         working-directory: terraform
@@ -101,7 +94,15 @@ jobs:
           ARM_USE_OIDC: true
           ARM_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
           ARM_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
-          ARM_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}    
+          ARM_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+      # ── 6. Terraform Plan ──────────────────────────────────────────────────
+      - name: Terraform Plan
+        working-directory: terraform
+        run: |
+          terraform plan \
+            -var="container_image=${{ steps.image.outputs.container_image }}" \
+            -out=tfplan \
+            -input=false    
 
       # ── 7. Terraform Apply ─────────────────────────────────────────────────
       - name: Terraform Apply
