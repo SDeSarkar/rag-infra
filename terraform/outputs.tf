@@ -63,3 +63,24 @@ output "postgres_fqdn" {
 output "redis_hostname" {
   value = azurerm_redis_cache.redis.hostname
 }
+
+output "container_app_environment_static_ip" {
+  description = "Static outbound IP of the Container App Environment (used in firewall rules)"
+  value       = azurerm_container_app_environment.cae.static_ip_address
+}
+
+output "container_app_fqdn" {
+  description = "FQDN of the Container App"
+  value       = azurerm_container_app.api.latest_revision_fqdn
+}
+
+output "acr_login_server" {
+  description = "ACR login server"
+  value       = azurerm_container_registry.acr.login_server
+}
+
+output "postgres_host" {
+  description = "Postgres server FQDN"
+  value       = azurerm_postgresql_flexible_server.pg.fqdn
+  sensitive   = false
+}
