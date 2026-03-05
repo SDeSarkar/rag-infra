@@ -1,4 +1,4 @@
-# ── App Registration for AgenticRAG API ──────────────────────────────────────
+# ─�� App Registration for AgenticRAG API ──────────────────────────────────────
 resource "azuread_application" "api" {
   display_name     = "${var.project}-${var.env}-api"
   identifier_uris  = ["api://agentic-rag"]
