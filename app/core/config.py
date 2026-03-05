@@ -2,7 +2,13 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
-    model_config = SettingsConfigDict(env_file=".env", extra="ignore")
+    # env_file only used for local dev — ignored if file doesn't exist
+    model_config = SettingsConfigDict(
+        env_file=".env",
+        env_file_encoding="utf-8",
+        env_ignore_empty=True,      # ignore empty values from .env
+        extra="ignore",
+    )
 
     # Azure Identity
     azure_client_id: str
