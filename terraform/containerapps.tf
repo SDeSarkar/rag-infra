@@ -73,7 +73,7 @@ resource "azurerm_container_app" "api" {
       # Azure OpenAI — resource-specific endpoint + deployment names, auth via MI
       env {
         name  = "AZURE_OPENAI_ENDPOINT"
-        value = "https://${azurerm_cognitive_account.openai.name}.openai.azure.com/"
+        value =  azurerm_cognitive_account.openai.endpoint
       }
 
       env {
