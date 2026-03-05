@@ -35,7 +35,7 @@ async def _safe(coro, name: str, timeout: int = 15):
     except asyncio.TimeoutError:
         logger.warning("STARTUP TIMEOUT: %s timed out after %ds — continuing", name, timeout)
     except Exception as exc:
-        logger.warning("STARTUP ERROR: %s failed — %s — continuing", name, exc)
+        logger.warning("STARTUP ERROR: %s failed — %s: %s — continuing", name, type(exc).__name__, exc)
     return None
 
 
@@ -59,6 +59,12 @@ async def init_clients():
     if result:
         pg_password = result.value
         logger.info("STARTUP: KV pg_password fetched OK")
+    else:
+        logger.warning(
+            "STARTUP: KV pg_password fetch FAILED — vault=%s secret=%s",
+            settings.keyvault_uri,
+            settings.kv_secret_pg_password,
+        )
 
     result = await _safe(
         kv_client.get_secret(settings.kv_secret_redis_key),
@@ -66,7 +72,16 @@ async def init_clients():
     )
     if result:
         redis_key = result.value
-        logger.info("STARTUP: KV redis_key fetched OK")
+        logger.info(
+            "STARTUP: KV redis_key fetched OK (length=%d)",
+            len(redis_key),
+        )
+    else:
+        logger.warning(
+            "STARTUP: KV redis_key fetch FAILED — vault=%s secret=%s",
+            settings.keyvault_uri,
+            settings.kv_secret_redis_key,
+        )
 
     # ── Azure AI Search (lazy — no connection at startup) ─────────────────────
     search_client = SearchClient(
@@ -126,6 +141,12 @@ async def init_clients():
 
     # ── Redis (with timeout — won't crash startup) ────────────────────────────
     if redis_key:
+        logger.info(
+            "STARTUP: Redis key fetched OK (length=%d), attempting connection to %s:%s",
+            len(redis_key),
+            settings.redis_host,
+            settings.redis_ssl_port,
+        )
         try:
             r = aioredis.from_url(
                 f"rediss://{settings.redis_host}:{settings.redis_ssl_port}",
@@ -137,10 +158,23 @@ async def init_clients():
             await asyncio.wait_for(r.ping(), timeout=10)
             redis_client = r
             logger.info("STARTUP: Redis connected OK")
+        except asyncio.TimeoutError:
+            logger.warning(
+                "STARTUP: Redis FAILED — TimeoutError — host=%s port=%s unreachable, check firewall",
+                settings.redis_host,
+                settings.redis_ssl_port,
+            )
         except Exception as exc:
-            logger.warning("STARTUP: Redis FAILED — %s — fix firewall/config", exc)
+            logger.warning(
+                "STARTUP: Redis FAILED — %s: %s — fix firewall/config",
+                type(exc).__name__,
+                exc,
+            )
     else:
-        logger.warning("STARTUP: No Redis key — skipping Redis")
+        logger.warning(
+            "STARTUP: No Redis key — skipping Redis (KV secret name: %s)",
+            settings.kv_secret_redis_key,
+        )
 
     # ── Always reaches here ───────────────────────────────────────────────────
     logger.info("STARTUP COMPLETE — app is ready to accept requests")
