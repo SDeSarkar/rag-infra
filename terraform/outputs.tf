@@ -28,7 +28,7 @@ output "search_index_name" {
 # Azure OpenAI
 output "aoai_endpoint" {
   description = "Resource-specific Azure OpenAI endpoint"
-  value       = "https://${azurerm_cognitive_account.openai.name}.openai.azure.com/"
+  value       = azurerm_cognitive_account.openai.endpoint
 }
 
 output "openai_chat_deployment" {
