@@ -125,6 +125,16 @@ resource "azurerm_container_app" "api" {
         name  = "KV_SECRET_REDIS_KEY"
         value = azurerm_key_vault_secret.redis_key.name
       }
+     # Entra ID — tenant + audience for JWT validation
+      env {
+        name  = "ENTRA_TENANT_ID"
+        value = data.azurerm_client_config.current.tenant_id
+      }
+
+      env {
+        name  = "ENTRA_AUDIENCE"
+        value = "api://agentic-rag"
+      }
 
       # App Insights
       env {
