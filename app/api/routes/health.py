@@ -31,11 +31,21 @@ async def health():
         services["postgres"] = str(exc)
         overall = ServiceStatus.degraded
 
-    # AI Search
+    # AI Search — check service reachability only, not index existence
     try:
         from app.core.config import settings
-        await clients.search_index_client.get_index(settings.azure_search_index_name)
-        services["ai_search"] = "ok"
+        from azure.core.exceptions import ResourceNotFoundError
+
+        try:
+            await clients.search_index_client.get_index(settings.azure_search_index_name)
+            services["ai_search"] = "ok"
+        except ResourceNotFoundError:
+            # Index doesn't exist yet — service is reachable, index created on first upload
+            services["ai_search"] = "ok (index not yet created — upload a document to initialise)"
+            logger.info(
+                "AI Search reachable but index '%s' not yet created — this is expected before first upload",
+                settings.azure_search_index_name,
+            )
     except Exception as exc:
         services["ai_search"] = str(exc)
         overall = ServiceStatus.degraded
