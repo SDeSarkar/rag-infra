@@ -59,16 +59,31 @@ resource "azurerm_container_app" "api" {
       cpu    = 1.0
       memory = "2Gi"
 
-      # Azure AI Search — endpoint only, auth via Managed Identity
+      # Azure AI Search — endpoint + index name, auth via Managed Identity
       env {
         name  = "AZURE_SEARCH_ENDPOINT"
         value = "https://${azurerm_search_service.search.name}.search.windows.net"
       }
 
-      # Azure OpenAI — endpoint only, auth via Managed Identity
+      env {
+        name  = "AZURE_SEARCH_INDEX_NAME"
+        value = var.search_index_name
+      }
+
+      # Azure OpenAI — resource-specific endpoint + deployment names, auth via MI
       env {
         name  = "AZURE_OPENAI_ENDPOINT"
-        value = azurerm_cognitive_account.openai.endpoint
+        value = "https://${azurerm_cognitive_account.openai.name}.openai.azure.com/"
+      }
+
+      env {
+        name  = "AZURE_OPENAI_DEPLOYMENT"
+        value = var.openai_chat_deployment
+      }
+
+      env {
+        name  = "AZURE_OPENAI_EMBEDDING_DEPLOYMENT"
+        value = var.openai_embedding_deployment
       }
 
       # Managed Identity client ID — required for UserAssigned MI
@@ -110,7 +125,7 @@ resource "azurerm_container_app" "api" {
         value = "https://${azurerm_storage_account.sa.name}.blob.core.windows.net/${azurerm_storage_container.raw_docs.name}"
       }
 
-      # Key Vault — only for Postgres password + Redis key (Search/OpenAI no longer need keys)
+      # Key Vault
       env {
         name  = "KEYVAULT_URI"
         value = azurerm_key_vault.kv.vault_uri
@@ -118,14 +133,15 @@ resource "azurerm_container_app" "api" {
 
       env {
         name  = "KV_SECRET_PG_PASSWORD"
-        value = azurerm_key_vault_secret.pg_password.name
+        value = "Postgres-AdminPassword"
       }
 
       env {
         name  = "KV_SECRET_REDIS_KEY"
-        value = azurerm_key_vault_secret.redis_key.name
+        value = "Redis-PrimaryKey"
       }
-     # Entra ID — tenant + audience for JWT validation
+
+      # Entra auth
       env {
         name  = "ENTRA_TENANT_ID"
         value = data.azurerm_client_config.current.tenant_id
@@ -143,12 +159,4 @@ resource "azurerm_container_app" "api" {
       }
     }
   }
-
-  depends_on = [
-    azurerm_key_vault_access_policy.api,
-    azurerm_role_assignment.api_acr_pull,
-    azurerm_role_assignment.api_search_index_data_contributor,
-    azurerm_role_assignment.api_openai_cognitive_services_user,
-    azurerm_role_assignment.api_storage_blob_data_reader
-  ]
 }
