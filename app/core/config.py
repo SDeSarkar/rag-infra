@@ -39,7 +39,7 @@ class Settings(BaseSettings):
 
     # Entra ID
     entra_tenant_id: str = ""
-    entra_audience: str = "api://agentic-rag"
+    entra_audience: str = ""
 
 
 settings = Settings()
