@@ -19,22 +19,34 @@ resource "azuread_application" "api" {
     }
   }
 
+  # ─��� DEPRECATED: old RAGUser role — disabled before removal (Azure requirement) ──
+  app_role {
+    allowed_member_types = ["User", "Application"]
+    description          = "Deprecated — replaced by sre role"
+    display_name         = "RAGUser (deprecated)"
+    enabled              = false                                      # ← must disable before delete
+    id                   = "00000000-0000-0000-0000-000000000002"    # ← keep old GUID
+    value                = "RAGUser"
+  }
+
+  # ── NEW: sre role — fresh GUID so Azure emits correct value in tokens ─────────
   app_role {
     allowed_member_types = ["User", "Application"]
     description          = "SRE team — can ingest and query documents"
     display_name         = "SRE"
     enabled              = true
-    id                   = "00000000-0000-0000-0000-000000000002"
-    value                = "sre"   # ← matches require_role("sre", "engineer")
+    id                   = "11111111-1111-1111-1111-111111111111"    # ← new GUID
+    value                = "sre"
   }
 
+  # ── NEW: engineer role ────────────────────────────────────────────────────────
   app_role {
     allowed_member_types = ["User", "Application"]
     description          = "Engineer — can ingest and query documents"
     display_name         = "Engineer"
     enabled              = true
-    id                   = "00000000-0000-0000-0000-000000000003"
-    value                = "engineer"   # ← matches require_role("sre", "engineer")
+    id                   = "22222222-2222-2222-2222-222222222222"    # ← new GUID
+    value                = "engineer"
   }
 
   tags = ["${var.project}", "${var.env}"]
@@ -51,16 +63,17 @@ data "azuread_service_principal" "api_mi" {
   client_id = azurerm_user_assigned_identity.api.client_id
 }
 
-# ── Assign sre role to Managed Identity and test client SP ───────────────────
+# ── Assign sre role to Managed Identity ──────────────────────────────────────
 resource "azuread_app_role_assignment" "api_mi_sre" {
-  app_role_id         = "00000000-0000-0000-0000-000000000002"  # sre
+  app_role_id         = "11111111-1111-1111-1111-111111111111"  # sre (new GUID)
   principal_object_id = data.azuread_service_principal.api_mi.object_id
   resource_object_id  = azuread_service_principal.api.object_id
 }
 
+# ── Assign sre role to test client SPs (e.g. CI pipeline, manual testing) ────
 resource "azuread_app_role_assignment" "raguser_assignments" {
   for_each            = toset(var.raguser_client_ids)
-  app_role_id         = "00000000-0000-0000-0000-000000000002"  # sre
+  app_role_id         = "11111111-1111-1111-1111-111111111111"  # sre (new GUID)
   principal_object_id = data.azuread_service_principal.raguser_principals[each.value].object_id
   resource_object_id  = azuread_service_principal.api.object_id
 }
