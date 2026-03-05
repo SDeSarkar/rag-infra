@@ -1,4 +1,4 @@
-# ACR pull 
+# ACR pull
 resource "azurerm_role_assignment" "api_acr_pull" {
   scope                = azurerm_container_registry.acr.id
   role_definition_name = "AcrPull"
@@ -12,17 +12,24 @@ resource "azurerm_role_assignment" "api_storage_blob_data_reader" {
   principal_id         = azurerm_user_assigned_identity.api.principal_id
 }
 
-# Azure AI Search — data plane index + query operations via AAD
+# Azure AI Search — query index (READ)
+resource "azurerm_role_assignment" "api_search_index_data_reader" {
+  scope                = azurerm_search_service.search.id
+  role_definition_name = "Search Index Data Reader"        # ← ADDED
+  principal_id         = azurerm_user_assigned_identity.api.principal_id
+}
+
+# Azure AI Search — write/manage index (READ+WRITE)
 resource "azurerm_role_assignment" "api_search_index_data_contributor" {
   scope                = azurerm_search_service.search.id
   role_definition_name = "Search Index Data Contributor"
   principal_id         = azurerm_user_assigned_identity.api.principal_id
 }
 
-# Azure AI Search — read service metadata (optional but recommended)
-resource "azurerm_role_assignment" "api_search_service_reader" {
+# Azure AI Search — service level operations
+resource "azurerm_role_assignment" "api_search_service_contributor" {
   scope                = azurerm_search_service.search.id
-  role_definition_name = "Reader"
+  role_definition_name = "Search Service Contributor"      # ← CHANGED from "Reader"
   principal_id         = azurerm_user_assigned_identity.api.principal_id
 }
 
