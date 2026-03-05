@@ -133,7 +133,7 @@ resource "azurerm_container_app" "api" {
 
       env {
         name  = "ENTRA_AUDIENCE"
-        value = "api://agentic-rag"
+        value = azuread_application.api.client_id
       }
 
       # App Insights
