@@ -7,5 +7,8 @@ resource "azurerm_search_service" "search" {
   replica_count   = 1
   partition_count = 1
 
+  local_authentication_enabled = true        # ← ADDED: enables AAD token auth
+  authentication_failure_mode  = "http403"   # ← ADDED: returns 403 on bad auth
+
   tags = var.tags
 }
