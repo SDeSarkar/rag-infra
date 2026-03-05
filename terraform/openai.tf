@@ -6,14 +6,13 @@ resource "azurerm_cognitive_account" "openai" {
   kind     = "OpenAI"
   sku_name = "S0"
 
-  # For MVP; later: private endpoints and restrict network.
   public_network_access_enabled = true
 
   tags = var.tags
 }
 
 # ── Model Deployments ─────────────────────────────────────────────────────────
-resource "azurerm_cognitive_account_deployment" "gpt4o" {
+resource "azurerm_cognitive_deployment" "gpt4o" {
   name                 = var.openai_chat_deployment
   cognitive_account_id = azurerm_cognitive_account.openai.id
 
@@ -23,13 +22,13 @@ resource "azurerm_cognitive_account_deployment" "gpt4o" {
     version = "2024-11-20"
   }
 
-  sku {
-    name     = "GlobalStandard"
+  scale {
+    type     = "GlobalStandard"
     capacity = 10
   }
 }
 
-resource "azurerm_cognitive_account_deployment" "text_embedding" {
+resource "azurerm_cognitive_deployment" "text_embedding" {
   name                 = var.openai_embedding_deployment
   cognitive_account_id = azurerm_cognitive_account.openai.id
 
@@ -39,10 +38,10 @@ resource "azurerm_cognitive_account_deployment" "text_embedding" {
     version = "1"
   }
 
-  sku {
-    name     = "GlobalStandard"
+  scale {
+    type     = "GlobalStandard"
     capacity = 10
   }
 
-  depends_on = [azurerm_cognitive_account_deployment.gpt4o]
+  depends_on = [azurerm_cognitive_deployment.gpt4o]
 }
