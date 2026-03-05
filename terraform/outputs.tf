@@ -20,15 +20,32 @@ output "search_endpoint" {
   value = "https://${azurerm_search_service.search.name}.search.windows.net"
 }
 
+output "search_index_name" {
+  description = "Azure AI Search index name"
+  value       = var.search_index_name
+}
+
 # Azure OpenAI
 output "aoai_endpoint" {
-  value = azurerm_cognitive_account.openai.endpoint
+  description = "Resource-specific Azure OpenAI endpoint"
+  value       = "https://${azurerm_cognitive_account.openai.name}.openai.azure.com/"
+}
+
+output "openai_chat_deployment" {
+  description = "GPT chat model deployment name"
+  value       = var.openai_chat_deployment
+}
+
+output "openai_embedding_deployment" {
+  description = "Text embedding model deployment name"
+  value       = var.openai_embedding_deployment
 }
 
 # ACR
-#output "acr_login_server" {
-#  value = azurerm_container_registry.acr.login_server
-#}
+output "acr_login_server" {
+  description = "ACR login server"
+  value       = azurerm_container_registry.acr.login_server
+}
 
 output "acr_admin_username" {
   value     = azurerm_container_registry.acr.admin_username
@@ -51,17 +68,9 @@ output "aca_environment_id" {
   value = azurerm_container_app_environment.cae.id
 }
 
-#output "container_app_fqdn" {
- # value = try(azurerm_container_app.api.ingress[0].fqdn, null)
-#}
-
-# Data services
-#output "postgres_fqdn" {
-#  value = azurerm_postgresql_flexible_server.pg.fqdn
-#}
-
-output "redis_hostname" {
-  value = azurerm_redis_cache.redis.hostname
+output "container_app_fqdn" {
+  description = "FQDN of the Container App"
+  value       = azurerm_container_app.api.latest_revision_fqdn
 }
 
 output "container_app_environment_static_ip" {
@@ -69,14 +78,9 @@ output "container_app_environment_static_ip" {
   value       = azurerm_container_app_environment.cae.static_ip_address
 }
 
-output "container_app_fqdn" {
-  description = "FQDN of the Container App"
-  value       = azurerm_container_app.api.latest_revision_fqdn
-}
-
-output "acr_login_server" {
-  description = "ACR login server"
-  value       = azurerm_container_registry.acr.login_server
+# Data services
+output "redis_hostname" {
+  value = azurerm_redis_cache.redis.hostname
 }
 
 output "postgres_host" {
