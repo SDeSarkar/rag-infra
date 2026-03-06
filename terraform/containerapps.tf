@@ -20,6 +20,7 @@ resource "azurerm_key_vault_access_policy" "api" {
   object_id    = azurerm_user_assigned_identity.api.principal_id
 
   secret_permissions = ["Get", "List"]
+  depends_on = [azurerm_key_vault_access_policy.tf]
 }
 
 resource "azurerm_container_app" "api" {
