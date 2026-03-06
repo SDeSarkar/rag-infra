@@ -27,32 +27,49 @@ Always:
 - Never output secrets, credentials, or connection strings.
 """
 
+# Common English words to skip during service name detection
+_STOP_WORDS = {
+    "what", "when", "where", "which", "there", "their", "about",
+    "would", "could", "should", "have", "been", "that", "this",
+    "with", "from", "your", "into", "will", "more", "also",
+}
+
 
 async def run_engineering_agent(session_id: str, user_message: str) -> dict[str, Any]:
     logger.info("Engineering agent: session=%s query='%s'", session_id, user_message[:80])
 
-    # 1) Conversation history
-    history = await get_conversation_history(session_id)
+    # 1) Conversation history from Redis (agent-scoped key)
+    history = []
+    if clients.redis_client:
+        try:
+            history = await get_conversation_history(f"eng:{session_id}")
+        except Exception as exc:
+            logger.warning("Redis history fetch failed: %s", exc)
+    else:
+        logger.warning("Engineering agent: Redis unavailable — no conversation history")
 
     # 2) RAG context from AI Search
     context, sources = await retrieve_context(user_message, top_k=5)
 
-    # 3) Service dependency lookup
+    # 3) Service dependency lookup from Postgres
     dependencies = []
     tool_calls = []
-    try:
-        words = user_message.lower().split()
-        for word in words:
-            if len(word) > 4:
-                rows = await query_service_dependencies(word)
-                if rows:
-                    dependencies = rows
-                    tool_calls.append(f"query_service_dependencies(service={word})")
-                    break
-    except Exception as exc:
-        logger.warning("Postgres dependency lookup failed: %s", exc)
+    if clients.pg_pool:
+        try:
+            words = user_message.lower().split()
+            for word in words:
+                if len(word) > 4 and word not in _STOP_WORDS:
+                    rows = await query_service_dependencies(word)
+                    if rows:
+                        dependencies = rows
+                        tool_calls.append(f"query_service_dependencies(service={word})")
+                        break
+        except Exception as exc:
+            logger.warning("Postgres dependency lookup failed: %s", exc)
+    else:
+        logger.warning("Engineering agent: Postgres unavailable — skipping dependency lookup")
 
-    # 4) Code execution (if code block detected)
+    # 4) Code execution (if code block detected in message)
     sandbox_result = None
     if "```python" in user_message:
         start = user_message.find("```python") + 9
@@ -87,6 +104,7 @@ async def run_engineering_agent(session_id: str, user_message: str) -> dict[str,
             "content": f"Sandbox execution result:\nStatus: {sandbox_result['status']}\nOutput:\n{sandbox_result['output']}"
         })
 
+    # Add conversation history + current message
     messages.extend(history[-10:])
     messages.append({"role": "user", "content": user_message})
 
@@ -100,14 +118,19 @@ async def run_engineering_agent(session_id: str, user_message: str) -> dict[str,
 
     answer = response.choices[0].message.content
 
-    # 7) Persist
-    await append_to_history(session_id, "user", user_message)
-    await append_to_history(session_id, "assistant", answer)
+    # 7) Persist to Redis + Postgres
+    if clients.redis_client:
+        try:
+            await append_to_history(f"eng:{session_id}", "user", user_message)
+            await append_to_history(f"eng:{session_id}", "assistant", answer)
+        except Exception as exc:
+            logger.warning("Redis history save failed: %s", exc)
 
-    try:
-        await log_agent_interaction(session_id, "engineering", user_message, answer)
-    except Exception as exc:
-        logger.warning("Failed to log engineering interaction to Postgres: %s", exc)
+    if clients.pg_pool:
+        try:
+            await log_agent_interaction(session_id, "engineering", user_message, answer)
+        except Exception as exc:
+            logger.warning("Failed to log engineering interaction to Postgres: %s", exc)
 
     return {
         "answer": answer,
