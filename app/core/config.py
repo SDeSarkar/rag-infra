@@ -6,7 +6,7 @@ class Settings(BaseSettings):
     model_config = SettingsConfigDict(
         env_file=".env",
         env_file_encoding="utf-8",
-        env_ignore_empty=True,      # ignore empty values from .env
+        env_ignore_empty=True,
         extra="ignore",
     )
 
@@ -22,6 +22,7 @@ class Settings(BaseSettings):
     azure_openai_deployment: str = "gpt-4o"
     azure_openai_embedding_deployment: str = "text-embedding-3-large"
     azure_openai_api_version: str = "2024-05-01-preview"
+    azure_openai_api_key: str = ""          # optional — for regional endpoints that don't support MI
 
     # Blob Storage
     blob_uri: str
@@ -30,6 +31,7 @@ class Settings(BaseSettings):
     keyvault_uri: str
     kv_secret_pg_password: str = "Postgres-AdminPassword"
     kv_secret_redis_key: str = "Redis-PrimaryKey"
+    kv_secret_openai_key: str = "AzureOpenAI-ApiKey"   # KV secret name for OpenAI API key
 
     # PostgreSQL
     postgres_host: str
