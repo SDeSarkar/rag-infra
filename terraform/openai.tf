@@ -6,7 +6,7 @@ resource "azurerm_cognitive_account" "openai" {
   kind     = "OpenAI"
   sku_name = "S0"
   # REQUIRED FOR MANAGED IDENTITY
-  custom_subdomain_name = "rag-agent-api-${var.environment}" 
+  #custom_subdomain_name = "rag-agent-api-${var.environment}" 
   public_network_access_enabled = true
 
   tags = var.tags
