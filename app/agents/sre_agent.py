@@ -26,12 +26,26 @@ Always:
 - Never reveal secrets, connection strings, or internal credentials.
 """
 
+# Common English words to skip during service name detection
+_STOP_WORDS = {
+    "what", "when", "where", "which", "there", "their", "about",
+    "would", "could", "should", "have", "been", "that", "this",
+    "with", "from", "your", "into", "will", "more", "also",
+}
+
 
 async def run_sre_agent(session_id: str, user_message: str) -> dict[str, Any]:
     logger.info("SRE agent: session=%s query='%s'", session_id, user_message[:80])
 
-    # 1) Retrieve conversation history from Redis
-    history = await get_conversation_history(session_id)
+    # 1) Retrieve conversation history from Redis (agent-scoped key)
+    history = []
+    if clients.redis_client:
+        try:
+            history = await get_conversation_history(f"sre:{session_id}")
+        except Exception as exc:
+            logger.warning("Redis history fetch failed: %s", exc)
+    else:
+        logger.warning("SRE agent: Redis unavailable — no conversation history")
 
     # 2) Retrieve relevant context from AI Search
     context, sources = await retrieve_context(user_message, top_k=5)
@@ -39,19 +53,32 @@ async def run_sre_agent(session_id: str, user_message: str) -> dict[str, Any]:
     # 3) Retrieve recent incidents from Postgres (if service name mentioned)
     incidents = []
     tool_calls = []
-    try:
-        words = user_message.lower().split()
-        for word in words:
-            if len(word) > 4:
-                rows = await query_incident_history(word, limit=3)
-                if rows:
-                    incidents = rows
-                    tool_calls.append(f"query_incident_history(service={word})")
-                    break
-    except Exception as exc:
-        logger.warning("Postgres incident lookup failed: %s", exc)
+    if clients.pg_pool:
+        try:
+            words = user_message.lower().split()
+            for word in words:
+                if len(word) > 4 and word not in _STOP_WORDS:
+                    rows = await query_incident_history(word, limit=3)
+                    if rows:
+                        incidents = rows
+                        tool_calls.append(f"query_incident_history(service={word})")
+                        break
+        except Exception as exc:
+            logger.warning("Postgres incident lookup failed: %s", exc)
+    else:
+        logger.warning("SRE agent: Postgres unavailable — skipping incident lookup")
 
-    # 4) Build messages
+    # 4) Sandbox execution (if code block detected in message)
+    sandbox_result = None
+    if "```python" in user_message:
+        start = user_message.find("```python") + 9
+        end = user_message.find("```", start)
+        if end > start:
+            code_block = user_message[start:end].strip()
+            sandbox_result = await execute_code(code_block)
+            tool_calls.append("execute_code(sandbox)")
+
+    # 5) Build messages
     messages = [{"role": "system", "content": SRE_SYSTEM_PROMPT}]
 
     if context:
@@ -70,11 +97,17 @@ async def run_sre_agent(session_id: str, user_message: str) -> dict[str, Any]:
             "content": f"Recent incidents:\n{incident_text}"
         })
 
-    # Add conversation history
+    if sandbox_result:
+        messages.append({
+            "role": "system",
+            "content": f"Sandbox execution result:\nStatus: {sandbox_result['status']}\nOutput:\n{sandbox_result['output']}"
+        })
+
+    # Add conversation history + current message
     messages.extend(history[-10:])
     messages.append({"role": "user", "content": user_message})
 
-    # 5) Call Azure OpenAI (AAD auth via Managed Identity)
+    # 6) Call Azure OpenAI
     response = await clients.openai_client.chat.completions.create(
         model=settings.azure_openai_deployment,
         messages=messages,
@@ -84,14 +117,19 @@ async def run_sre_agent(session_id: str, user_message: str) -> dict[str, Any]:
 
     answer = response.choices[0].message.content
 
-    # 6) Persist to Redis + Postgres
-    await append_to_history(session_id, "user", user_message)
-    await append_to_history(session_id, "assistant", answer)
+    # 7) Persist to Redis + Postgres
+    if clients.redis_client:
+        try:
+            await append_to_history(f"sre:{session_id}", "user", user_message)
+            await append_to_history(f"sre:{session_id}", "assistant", answer)
+        except Exception as exc:
+            logger.warning("Redis history save failed: %s", exc)
 
-    try:
-        await log_agent_interaction(session_id, "sre", user_message, answer)
-    except Exception as exc:
-        logger.warning("Failed to log SRE interaction to Postgres: %s", exc)
+    if clients.pg_pool:
+        try:
+            await log_agent_interaction(session_id, "sre", user_message, answer)
+        except Exception as exc:
+            logger.warning("Failed to log SRE interaction to Postgres: %s", exc)
 
     return {
         "answer": answer,
