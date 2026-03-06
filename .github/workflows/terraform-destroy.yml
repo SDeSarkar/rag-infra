@@ -51,6 +51,22 @@ jobs:
             -backend-config="container_name=${{ secrets.TFSTATE_CONTAINER }}" \
             -backend-config="key=${{ github.repository }}-main.tfstate"
 
+      - name: Terraform State Cleanup (remove orphaned KV access policy)
+        run: |
+          echo "Checking for orphaned state entries..."
+
+          # Remove the duplicate/imported-but-orphaned api_mi policy
+          terraform state list | grep -q "azurerm_key_vault_access_policy.api_mi" \
+            && terraform state rm azurerm_key_vault_access_policy.api_mi \
+            && echo "Removed: azurerm_key_vault_access_policy.api_mi" \
+            || echo "Not present (already clean): azurerm_key_vault_access_policy.api_mi"
+
+          # Verify the canonical policy is tracked correctly
+          terraform state list | grep -q "azurerm_key_vault_access_policy.api" \
+            && echo "Canonical policy present: azurerm_key_vault_access_policy.api" \
+            || echo "WARNING: azurerm_key_vault_access_policy.api not in state — destroy may skip it"
+            
+
       - name: Terraform Destroy (plan)
         run: |
           LOCATION="${{ vars.TF_LOCATION }}"
