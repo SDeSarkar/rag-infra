@@ -70,10 +70,10 @@ resource "azurerm_container_app" "api" {
         value = var.search_index_name
       }
 
-      # Azure OpenAI — resource-specific endpoint + deployment names, auth via MI
+      # Azure OpenAI — endpoint + deployment names
       env {
         name  = "AZURE_OPENAI_ENDPOINT"
-        value =  azurerm_cognitive_account.openai.endpoint
+        value = azurerm_cognitive_account.openai.endpoint
       }
 
       env {
@@ -139,6 +139,13 @@ resource "azurerm_container_app" "api" {
       env {
         name  = "KV_SECRET_REDIS_KEY"
         value = "Redis-PrimaryKey"
+      }
+
+      # OpenAI API key secret name — app fetches this from KV at startup
+      # Required for South India regional endpoint which does not support MI auth
+      env {
+        name  = "KV_SECRET_OPENAI_KEY"
+        value = "AzureOpenAI-ApiKey"
       }
 
       # Entra auth
