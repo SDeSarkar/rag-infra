@@ -51,6 +51,7 @@ async def init_clients():
 
     pg_password = None
     redis_key = None
+    openai_api_key = settings.azure_openai_api_key or None  # may be set via env var
 
     result = await _safe(
         kv_client.get_secret(settings.kv_secret_pg_password),
@@ -72,16 +73,29 @@ async def init_clients():
     )
     if result:
         redis_key = result.value
-        logger.info(
-            "STARTUP: KV redis_key fetched OK (length=%d)",
-            len(redis_key),
-        )
+        logger.info("STARTUP: KV redis_key fetched OK (length=%d)", len(redis_key))
     else:
         logger.warning(
             "STARTUP: KV redis_key fetch FAILED — vault=%s secret=%s",
             settings.keyvault_uri,
             settings.kv_secret_redis_key,
         )
+
+    # ── OpenAI API key from Key Vault (for regional endpoints that don't support MI) ──
+    if not openai_api_key:
+        result = await _safe(
+            kv_client.get_secret(settings.kv_secret_openai_key),
+            "KV:openai_api_key", timeout=15
+        )
+        if result:
+            openai_api_key = result.value
+            logger.info("STARTUP: KV openai_api_key fetched OK")
+        else:
+            logger.warning(
+                "STARTUP: KV openai_api_key fetch FAILED — vault=%s secret=%s — will try MI auth",
+                settings.keyvault_uri,
+                settings.kv_secret_openai_key,
+            )
 
     # ── Azure AI Search (lazy — no connection at startup) ─────────────────────
     search_client = SearchClient(
@@ -103,18 +117,34 @@ async def init_clients():
     )
     logger.info("STARTUP: Blob client initialised OK")
 
-    # ── Azure OpenAI (lazy — no connection at startup) ────────────────────────
-    sync_credential = SyncMI(client_id=settings.azure_client_id)
-    token_provider = get_bearer_token_provider(
-        sync_credential,
-        "https://cognitiveservices.azure.com/.default"
-    )
-    openai_client = AsyncAzureOpenAI(
-        azure_endpoint=settings.azure_openai_endpoint,
-        azure_ad_token_provider=token_provider,
-        api_version=settings.azure_openai_api_version,
-    )
-    logger.info("STARTUP: OpenAI client initialised OK")
+    # ── Azure OpenAI ──────────────────────────────────────────────────────────
+    # South India uses a regional cognitive endpoint which requires API key auth.
+    # Resource-specific endpoints (*.openai.azure.com) support MI auth.
+    if openai_api_key:
+        openai_client = AsyncAzureOpenAI(
+            azure_endpoint=settings.azure_openai_endpoint,
+            api_key=openai_api_key,
+            api_version=settings.azure_openai_api_version,
+        )
+        logger.info(
+            "STARTUP: OpenAI client initialised with API key auth (endpoint=%s)",
+            settings.azure_openai_endpoint,
+        )
+    else:
+        sync_credential = SyncMI(client_id=settings.azure_client_id)
+        token_provider = get_bearer_token_provider(
+            sync_credential,
+            "https://cognitiveservices.azure.com/.default"
+        )
+        openai_client = AsyncAzureOpenAI(
+            azure_endpoint=settings.azure_openai_endpoint,
+            azure_ad_token_provider=token_provider,
+            api_version=settings.azure_openai_api_version,
+        )
+        logger.info(
+            "STARTUP: OpenAI client initialised with Managed Identity auth (endpoint=%s)",
+            settings.azure_openai_endpoint,
+        )
 
     # ── PostgreSQL (with timeout — won't crash startup) ───────────────────────
     if pg_password:
