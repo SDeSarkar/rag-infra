@@ -889,5 +889,3 @@ List all documents available in the Blob Storage container.
 | **Security Team** | Key Vault access policies, Managed Identity role assignments, Entra ID app roles |
 
 ---
-
-*Generated: 2026-03-06 | Branch: `azure-mvp` | Repo: `SameepSB/rag-infra`*
