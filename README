@@ -78,10 +78,12 @@ APP_NAME="gh-oidc-terraform-${RANDOM}"
 SA="tfstate$RANDOM$RANDOM"   # must be globally unique, lowercase
 CONTAINER="tfstate"
 
+# create RG for TFSTATE_RG 
 az group create -n $RG_NAME -l $LOCATION
+# Create TFSTATE_SA
 az storage account create -n $SA -g $RG_NAME -l $LOCATION --sku Standard_LRS
+# create TFSTATE_CONTAINER
 az storage container create --name $CONTAINER --account-name $SA --auth-mode login
-
 
 # Create an AAD app + service principal
 az ad app create --display-name "$APP_NAME" > app.json
@@ -114,7 +116,12 @@ Add GitHub repo secrets received from previous steps
 In your GitHub repo → Settings → Secrets and variables → Actions → New repository secret:
 AZURE_CLIENT_ID
 AZURE_TENANT_ID
-AZURE_SUBSCRIPTION_ID
+AZURE_SUBSCRIPTION_ID 
+
+Add these as GitHub secrets too: for terraform state file
+TFSTATE_RG
+TFSTATE_SA
+TFSTATE_CONTAINER
 
 Step 3 
 ===============
