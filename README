@@ -110,6 +110,10 @@ az ad app federated-credential create \
     \"audiences\": [\"api://AzureADTokenExchange\"]
   }" 
 
+# repo is a fork
+In forks, Actions may be disabled by default.
+Repo → Actions tab → there may be a banner to Enable workflows.
+
 Step2 
 =============
 Add GitHub repo secrets received from previous steps 
