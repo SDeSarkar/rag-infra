@@ -68,11 +68,20 @@ Step 1 >
 az login
 az account show
 SUBSCRIPTION_ID=$(az account show --query id -o tsv)
-
+create a storageaccount & storage contianer 
 # Variables
 RG_NAME="<your-bootstrap-rg-or-any-rg>"  ( create only for Terraform statefile ) 
 LOCATION="eastus"  ( location depends on your deployed location )
 APP_NAME="gh-oidc-terraform-${RANDOM}"
+
+# Create Storage account for terraform statefile 
+SA="tfstate$RANDOM$RANDOM"   # must be globally unique, lowercase
+CONTAINER="tfstate"
+
+az group create -n $RG_NAME -l $LOCATION
+az storage account create -n $SA -g $RG_NAME -l $LOCATION --sku Standard_LRS
+az storage container create --name $CONTAINER --account-name $SA --auth-mode login
+
 
 # Create an AAD app + service principal
 az ad app create --display-name "$APP_NAME" > app.json
