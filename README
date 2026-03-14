@@ -110,6 +110,9 @@ az ad app federated-credential create \
     \"audiences\": [\"api://AzureADTokenExchange\"]
   }" 
 
+# validate Create federated credential
+az ad app federated-credential list --id "$APP_ID" -o table
+
 # repo is a fork
 In forks, Actions may be disabled by default.
 Repo → Actions tab → there may be a banner to Enable workflows.
