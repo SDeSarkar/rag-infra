@@ -172,3 +172,11 @@ az role assignment create \
 #   --role "Owner" \
 #   --scope "/subscriptions/$SUB"
 
+step 5
+===========
+Run sequence (fastest path)
+Run bootstrap-infra workflow (manual)
+Push to main (or run acr-build-push manually) → builds image to ACR
+terraform-apply (manual)
+PR checks: terraform-plan runs on PRs
+Tear down: run terraform-destroy with confirm = DESTROY
