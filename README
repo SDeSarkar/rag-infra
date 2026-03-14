@@ -60,7 +60,7 @@ This project is licensed under the MIT License — see the LICENSE file for deta
 Contact
 For questions about this repository, open an issue or contact the repository owner: [SameepSB](https://github.com/SameepSB).
 
-
+# Below are the steps to be followed 
 Step 1 >
 ==============
 
@@ -70,8 +70,8 @@ az account show
 SUBSCRIPTION_ID=$(az account show --query id -o tsv)
 
 # Variables
-RG_NAME="<your-bootstrap-rg-or-any-rg>"
-LOCATION="eastus"
+RG_NAME="<your-bootstrap-rg-or-any-rg>"  ( create only for Terraform statefile ) 
+LOCATION="eastus"  ( location depends on your deployed location )
 APP_NAME="gh-oidc-terraform-${RANDOM}"
 
 # Create an AAD app + service principal
