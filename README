@@ -136,14 +136,18 @@ TFSTATE_RG
 TFSTATE_SA
 TFSTATE_CONTAINER
 
-Step 3 
+Step 3 Register the Microsoft.App resource provider
 ===============
 az login
+SUBSCRIPTION_ID=$(az account show --query id -o tsv)
 az account set --subscription "<SUBSCRIPTION_ID>"
 
 az provider register --namespace Microsoft.App
 az provider register --namespace Microsoft.OperationalInsights
-az provider register --namespace Microsoft.ContainerService
+az provider register --namespace Microsoft.ContainerService 
+
+Validation Microsoft.App resource provider 
+az provider show --namespace Microsoft.App --query registrationState -o tsv
 
 Step 4 
 ============
