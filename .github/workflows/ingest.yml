@@ -1,0 +1,167 @@
+name: ingest-documents
+
+on:
+  # ── Trigger manually from GitHub UI ───────────────────────────────────────
+  workflow_dispatch:
+    inputs:
+      force_reindex:
+        description: "Force re-embed all docs even if already indexed"
+        required: false
+        default: "false"
+        type: choice
+        options: ["false", "true"]
+      blob_prefix:
+        description: "Only ingest docs under this prefix (e.g. runbooks/) — leave empty for all"
+        required: false
+        default: ""
+
+  # ── Or run on a schedule (e.g. nightly) ───────────────────────────────────
+  # schedule:
+  #   - cron: "0 2 * * *"   # 2am UTC daily
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  ingest:
+    runs-on: ubuntu-latest
+    env:
+      ARM_USE_OIDC:        "true"
+      ARM_CLIENT_ID:       ${{ secrets.AZURE_CLIENT_ID }}
+      ARM_TENANT_ID:       ${{ secrets.AZURE_TENANT_ID }}
+      ARM_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+    steps:
+      # ── 1. Azure Login (same OIDC as terraform workflow) ──────────────────
+      - name: Azure Login
+        uses: azure/login@v2
+        with:
+          client-id:       ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id:       ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      # ��─ 2. Resolve runtime values from live Azure resources ─────��─────────
+      - name: Resolve Azure resource names
+        id: resolve
+        run: |
+          RG="agentic-rag-dev-rg"
+
+          FQDN=$(az containerapp show \
+            --name "agentic-rag-dev-api" \
+            --resource-group "$RG" \
+            --query "properties.latestRevisionFqdn" -o tsv)
+
+          KV_NAME=$(az keyvault list \
+            --resource-group "$RG" \
+            --query "[0].name" -o tsv)
+
+          APP_CLIENT_ID=$(az containerapp show \
+            --name "agentic-rag-dev-api" \
+            --resource-group "$RG" \
+            --query "properties.template.containers[0].env[?name=='ENTRA_AUDIENCE'].value" \
+            -o tsv)
+
+          TENANT_ID=$(az account show --query tenantId -o tsv)
+
+          echo "fqdn=$FQDN"               >> "$GITHUB_OUTPUT"
+          echo "kv_name=$KV_NAME"         >> "$GITHUB_OUTPUT"
+          echo "app_client_id=$APP_CLIENT_ID" >> "$GITHUB_OUTPUT"
+          echo "tenant_id=$TENANT_ID"     >> "$GITHUB_OUTPUT"
+
+          echo "API FQDN      : $FQDN"
+          echo "Key Vault     : $KV_NAME"
+          echo "App Client ID : $APP_CLIENT_ID"
+
+      # ── 3. Get API token from Key Vault secret ────────────────────────────
+      - name: Get Bearer token
+        id: token
+        run: |
+          KV_NAME="${{ steps.resolve.outputs.kv_name }}"
+          APP_CLIENT_ID="${{ steps.resolve.outputs.app_client_id }}"
+          TENANT_ID="${{ steps.resolve.outputs.tenant_id }}"
+
+          # Fetch the client secret Terraform stored in Key Vault
+          APP_CLIENT_SECRET=$(az keyvault secret show \
+            --vault-name "$KV_NAME" \
+            --name "EntraApp-ClientSecret" \
+            --query "value" -o tsv)
+
+          # Get Bearer token
+          RESPONSE=$(curl -s -X POST \
+            "https://login.microsoftonline.com/${TENANT_ID}/oauth2/v2.0/token" \
+            --data-urlencode "grant_type=client_credentials" \
+            --data-urlencode "client_id=${APP_CLIENT_ID}" \
+            --data-urlencode "client_secret=${APP_CLIENT_SECRET}" \
+            --data-urlencode "scope=${APP_CLIENT_ID}/.default")
+
+          TOKEN=$(echo "$RESPONSE" | python3 -c \
+            "import sys,json; print(json.load(sys.stdin)['access_token'])")
+
+          # Mask token so it never appears in logs
+          echo "::add-mask::$TOKEN"
+          echo "token=$TOKEN" >> "$GITHUB_OUTPUT"
+          echo "Token acquired ✅"
+
+      # ── 4. Wait for API to be healthy ─────────────────────────────────────
+      - name: Wait for API health
+        run: |
+          FQDN="${{ steps.resolve.outputs.fqdn }}"
+          echo "Waiting for https://$FQDN/health ..."
+          for i in $(seq 1 12); do
+            STATUS=$(curl -s "https://$FQDN/health" \
+              | python3 -c "import sys,json; print(json.load(sys.stdin).get('status',''))" 2>/dev/null || true)
+            echo "  Attempt $i: $STATUS"
+            if [ "$STATUS" = "ok" ] || [ "$STATUS" = "degraded" ]; then
+              echo "API is up ✅"
+              break
+            fi
+            if [ "$i" = "12" ]; then
+              echo "❌ API did not become healthy in 2 minutes"
+              exit 1
+            fi
+            sleep 10
+          done
+
+      # ── 5. Trigger ingestion ──────────────────────────────────────────────
+      - name: Trigger ingestion
+        run: |
+          FQDN="${{ steps.resolve.outputs.fqdn }}"
+          TOKEN="${{ steps.token.outputs.token }}"
+          FORCE="${{ github.event.inputs.force_reindex || 'false' }}"
+          PREFIX="${{ github.event.inputs.blob_prefix || '' }}"
+
+          echo "Triggering ingestion..."
+          echo "  force_reindex : $FORCE"
+          echo "  blob_prefix   : '$PREFIX'"
+
+          RESPONSE=$(curl -s -w "\n%{http_code}" -X POST "https://$FQDN/ingest" \
+            -H "Authorization: Bearer $TOKEN" \
+            -H "Content-Type: application/json" \
+            -d "{
+              \"container\": \"raw-docs\",
+              \"blob_prefix\": \"$PREFIX\",
+              \"force_reindex\": $FORCE
+            }")
+
+          HTTP_CODE=$(echo "$RESPONSE" | tail -1)
+          BODY=$(echo "$RESPONSE" | head -n -1)
+
+          echo "$BODY" | python3 -m json.tool
+
+          if [ "$HTTP_CODE" != "200" ]; then
+            echo "❌ Ingest failed — HTTP $HTTP_CODE"
+            exit 1
+          fi
+
+          STATUS=$(echo "$BODY"  | python3 -c "import sys,json; print(json.load(sys.stdin).get('status',''))")
+          INDEXED=$(echo "$BODY" | python3 -c "import sys,json; print(json.load(sys.stdin).get('documents_indexed',0))")
+          ERRORS=$(echo "$BODY"  | python3 -c "import sys,json; print(len(json.load(sys.stdin).get('errors',[])))")
+
+          echo "══════════════════════════════════"
+          echo "  Status  : $STATUS"
+          echo "  Indexed : $INDEXED chunks"
+          echo "  Errors  : $ERRORS"
+          echo "══════════════════════════════════"
+
+          [ "$ERRORS" = "0" ] && echo "✅ Ingestion complete" || { echo "⚠ Finished with errors"; exit 1; }
