@@ -88,3 +88,20 @@ output "postgres_host" {
   value       = azurerm_postgresql_flexible_server.pg.fqdn
   sensitive   = false
 }
+
+
+
+output "entra_app_client_id" {
+  description = "Client ID of the agentic-rag-dev-api app registration — use for token generation"
+  value       = azuread_application.api.client_id
+}
+
+output "entra_tenant_id" {
+  description = "Entra tenant ID"
+  value       = data.azurerm_client_config.current.tenant_id
+}
+
+output "entra_client_secret_kv_name" {
+  description = "Key Vault secret name holding the app client secret"
+  value       = "EntraApp-ClientSecret"
+}
