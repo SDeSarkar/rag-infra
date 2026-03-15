@@ -1,4 +1,4 @@
-# ── App Registration for AgenticRAG API ───────────────────────────────────────
+# ── App Registration ──────────────────────────────────────────────────────────
 resource "azuread_application" "api" {
   display_name     = "${var.project}-${var.env}-api"
   identifier_uris  = ["api://agentic-rag"]
@@ -6,7 +6,6 @@ resource "azuread_application" "api" {
 
   api {
     requested_access_token_version = 2
-
     oauth2_permission_scope {
       admin_consent_description  = "Allow the application to access AgenticRAG API"
       admin_consent_display_name = "Access AgenticRAG API"
@@ -19,7 +18,6 @@ resource "azuread_application" "api" {
     }
   }
 
-  # ── DEPRECATED: old RAGUser role — disabled before removal (Azure requirement)
   app_role {
     allowed_member_types = ["User", "Application"]
     description          = "Deprecated — replaced by sre role"
@@ -29,7 +27,6 @@ resource "azuread_application" "api" {
     value                = "RAGUser"
   }
 
-  # ── sre role ─────────────────────────────────────────────────────────────────
   app_role {
     allowed_member_types = ["User", "Application"]
     description          = "SRE team — can ingest and query documents"
@@ -39,7 +36,6 @@ resource "azuread_application" "api" {
     value                = "sre"
   }
 
-  # ── engineer role ─────────────────────────────────────────────────────────────
   app_role {
     allowed_member_types = ["User", "Application"]
     description          = "Engineer — can ingest and query documents"
@@ -52,21 +48,33 @@ resource "azuread_application" "api" {
   tags = ["${var.project}", "${var.env}"]
 }
 
-# ── Service Principal for the App Registration ────────────────────────────────
+# ── Service Principal ─────────────────────────────────────────────────────────
 resource "azuread_service_principal" "api" {
   client_id                    = azuread_application.api.client_id
   app_role_assignment_required = false
 }
 
-# ── Assign sre role to the Managed Identity ───────────────────────────────────
-# FIX: Use azurerm_user_assigned_identity.api.principal_id directly.
-# The old approach used a data "azuread_service_principal" lookup by client_id,
-# which fails on fresh deployments because Azure AD replication of the MI's SP
-# can take 5–30 minutes. The principal_id attribute is available immediately
-# from the azurerm resource without any Entra ID graph query.
+# ── Client Secret for scripts / CI to get tokens ─────────────────────────────
+# Stored in Key Vault — never in Terraform state plaintext
+resource "azuread_application_password" "api_secret" {
+  application_id = azuread_application.api.id
+  display_name   = "terraform-managed"
+  end_date       = "2099-01-01T00:00:00Z"   # rotate via terraform taint if needed
+}
+
+# Store secret in Key Vault so scripts/CI fetch it securely
+resource "azurerm_key_vault_secret" "api_client_secret" {
+  name         = "EntraApp-ClientSecret"
+  value        = azuread_application_password.api_secret.value
+  key_vault_id = azurerm_key_vault.kv.id
+
+  depends_on = [azurerm_key_vault_access_policy.tf]
+}
+
+# ── Assign sre role to Managed Identity ──────────────────────────────────────
 resource "azuread_app_role_assignment" "api_mi_sre" {
-  app_role_id         = "11111111-1111-1111-1111-111111111111"  # sre role
-  principal_object_id = azurerm_user_assigned_identity.api.principal_id  # ← direct, no data lookup
+  app_role_id         = "11111111-1111-1111-1111-111111111111"
+  principal_object_id = azurerm_user_assigned_identity.api.principal_id
   resource_object_id  = azuread_service_principal.api.object_id
 
   depends_on = [
@@ -75,10 +83,10 @@ resource "azuread_app_role_assignment" "api_mi_sre" {
   ]
 }
 
-# ── Assign sre role to test client SPs (e.g. CI pipeline, manual testing) ─────
+# ── Assign sre role to additional SPs (CI pipeline etc.) ─────────────────────
 resource "azuread_app_role_assignment" "raguser_assignments" {
   for_each            = toset(var.raguser_client_ids)
-  app_role_id         = "11111111-1111-1111-1111-111111111111"  # sre role
+  app_role_id         = "11111111-1111-1111-1111-111111111111"
   principal_object_id = data.azuread_service_principal.raguser_principals[each.value].object_id
   resource_object_id  = azuread_service_principal.api.object_id
 }
