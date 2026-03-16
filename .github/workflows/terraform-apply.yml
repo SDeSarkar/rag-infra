@@ -87,7 +87,7 @@ jobs:
         run: |
           terraform plan \
             -var="container_image=${{ steps.image.outputs.container_image }}" \
-            -var='admin_object_ids=${{ vars.TF_ADMIN_OBJECT_IDS || '[]' }}' \
+            -var='admin_object_ids=["${{ vars.TF_ADMIN_OBJECT_IDS }}"]' \
             -out=tfplan \
             -input=false
 
