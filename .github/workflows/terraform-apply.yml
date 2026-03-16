@@ -136,14 +136,21 @@ jobs:
             echo "MI not found yet — api_mi import skipped (will be created fresh)"
           fi
 
-      # ── 7. Terraform Plan ────────────��─────────────────────────────────────
+      # ── 7. Terraform Plan ──────────────────────────────────────────────────
       - name: Terraform Plan
         working-directory: terraform
         run: |
           ADMIN_OID="${{ vars.TF_ADMIN_OBJECT_IDS }}"
+          RAGUSER_IDS="${{ vars.TF_RAGUSER_CLIENT_IDS }}"
+
+          # Build JSON arrays
+          ADMIN_JSON="[\"${ADMIN_OID}\"]"
+          RAGUSER_JSON="[\"${RAGUSER_IDS}\"]"
+
           terraform plan \
             -var="container_image=${{ steps.image.outputs.container_image }}" \
-            -var="admin_object_ids=[\"${ADMIN_OID}\"]" \
+            -var="admin_object_ids=${ADMIN_JSON}" \
+            -var="raguser_client_ids=${RAGUSER_JSON}" \
             -out=tfplan \
             -input=false
 
