@@ -37,6 +37,13 @@ variable "raguser_client_ids" {
   default     = []
 }
 
+# ── Admin object IDs — humans who need portal / az cli access to Key Vault ────
+variable "admin_object_ids" {
+  type        = list(string)
+  description = "Object IDs of human admins who need Key Vault secret access (get/list/set)"
+  default     = []
+}
+
 # ── OpenAI model deployment names ────────────────────────────────────────────
 variable "openai_chat_deployment" {
   type        = string
