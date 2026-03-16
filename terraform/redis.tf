@@ -12,11 +12,13 @@ resource "azurerm_redis_cache" "redis" {
   tags = var.tags
 }
 
-# ── Firewall — allow Container App outbound IP ────────────────────────────────
+# ── Firewall — allow Container App Environment static outbound IP ─────────────
+# Uses CAE static_ip_address — stable across revisions and redeployments
+# Same IP used for PostgreSQL firewall rule
 resource "azurerm_redis_firewall_rule" "allow_container_app" {
   name                = "allow_container_app"
   redis_cache_name    = azurerm_redis_cache.redis.name
   resource_group_name = azurerm_resource_group.rg.name
-  start_ip            = tolist(azurerm_container_app.api.outbound_ip_addresses)[0]  # ← FIXED
-  end_ip              = tolist(azurerm_container_app.api.outbound_ip_addresses)[0]  # ← FIXED
+  start_ip            = azurerm_container_app_environment.cae.static_ip_address
+  end_ip              = azurerm_container_app_environment.cae.static_ip_address
 }
