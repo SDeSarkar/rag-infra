@@ -21,33 +21,18 @@ resource "azurerm_key_vault" "kv" {
   tags = var.tags
 }
 
-# ── Access policy: GitHub Actions OIDC SP (runs terraform apply) ──────────────
-# This is AZURE_CLIENT_ID — the SP that runs CI/CD
-# Gets full secret access so it can write secrets (terraform apply)
-# and read them back (ingest workflow)
+# ── Access policy: GitHub Actions OIDC SP ────────────────────────────────────
+# Full access — writes secrets during apply, reads them during ingest workflow
 resource "azurerm_key_vault_access_policy" "tf" {
   key_vault_id = azurerm_key_vault.kv.id
   tenant_id    = data.azurerm_client_config.current.tenant_id
-  object_id    = data.azurerm_client_config.current.object_id  # whoever ran terraform
-
-  secret_permissions = ["Get", "Set", "List", "Delete", "Purge", "Recover"]
-}
-
-# ── Access policy: Admin / developer human identity ───────────────────────────
-# Allows portal access + az cli access for debugging
-# Set var.admin_object_ids = ["your-personal-oid"] in GitHub Variables
-resource "azurerm_key_vault_access_policy" "admins" {
-  for_each = toset(var.admin_object_ids)
-
-  key_vault_id = azurerm_key_vault.kv.id
-  tenant_id    = data.azurerm_client_config.current.tenant_id
-  object_id    = each.value
+  object_id    = data.azurerm_client_config.current.object_id
 
   secret_permissions = ["Get", "Set", "List", "Delete", "Purge", "Recover"]
 }
 
 # ── Access policy: Container App Managed Identity ─────────────────────────────
-# Allows the running app to read secrets at runtime
+# App reads secrets at runtime (pg password, redis key, openai key)
 resource "azurerm_key_vault_access_policy" "api_mi" {
   key_vault_id = azurerm_key_vault.kv.id
   tenant_id    = data.azurerm_client_config.current.tenant_id
@@ -57,3 +42,15 @@ resource "azurerm_key_vault_access_policy" "api_mi" {
 
   depends_on = [azurerm_key_vault_access_policy.tf]
 }
+
+# ── Access policy: Human admins (YOUR personal OID) ───────────────────────────
+# NOT managed by Terraform — created once manually, never destroyed
+# See: scripts/setup_kv_admin_access.sh
+#
+# az keyvault set-policy \
+#   --name <kv-name> \
+#   --object-id <your-oid> \
+#   --secret-permissions get list set delete
+#
+# This is intentionally outside Terraform lifecycle so terraform destroy
+# does not remove your portal/CLI access to the Key Vault.
