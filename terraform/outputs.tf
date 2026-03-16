@@ -105,3 +105,9 @@ output "entra_client_secret_kv_name" {
   description = "Key Vault secret name holding the app client secret"
   value       = "EntraApp-ClientSecret"
 }
+
+# Key Vault
+output "keyvault_name" {
+  description = "Name of the Azure Key Vault"
+  value       = azurerm_key_vault.kv.name
+}
