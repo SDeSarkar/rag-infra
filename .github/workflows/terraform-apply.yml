@@ -87,8 +87,9 @@ jobs:
         run: |
           terraform plan \
             -var="container_image=${{ steps.image.outputs.container_image }}" \
+            -var='admin_object_ids=${{ vars.TF_ADMIN_OBJECT_IDS || '[]' }}' \
             -out=tfplan \
-            -input=false    
+            -input=false
 
       # ── 7. Terraform Apply ─────────────────────────────────────────────────
       - name: Terraform Apply
