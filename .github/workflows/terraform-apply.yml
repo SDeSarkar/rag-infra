@@ -174,3 +174,98 @@ jobs:
           echo "App Client ID       : $(terraform output -raw entra_app_client_id)"
           echo "Image deployed      : ${{ steps.image.outputs.container_image }}"
           echo "============================================"
+
+      # ── 10. Wait for health + trigger ingestion ────────────────────────────
+      - name: Wait for API health and trigger ingestion
+        working-directory: terraform
+        run: |
+          FQDN=$(terraform output -raw container_app_fqdn)
+          KV_NAME=$(terraform output -raw keyvault_name)
+          APP_CLIENT_ID=$(terraform output -raw entra_app_client_id)
+          TENANT_ID=$(terraform output -raw entra_tenant_id)
+
+          echo "API           : https://$FQDN"
+          echo "App Client ID : $APP_CLIENT_ID"
+
+          # ── Wait for /health ───────────────────────────────────────────────
+          echo "Waiting for API to become healthy..."
+          for i in $(seq 1 20); do
+            STATUS=$(curl -s --max-time 5 "https://$FQDN/health" \
+              | python3 -c "import sys,json; print(json.load(sys.stdin).get('status',''))" \
+              2>/dev/null || echo "")
+            echo "  Attempt $i/20: $STATUS"
+            [ "$STATUS" = "ok" ] || [ "$STATUS" = "degraded" ] && { echo "API healthy ✅"; break; }
+            [ "$i" = "20" ] && echo "❌ API health timeout after 5 min" && exit 1
+            sleep 15
+          done
+
+          # ── Get token using GitHub Actions OIDC SP ─────────────────────────
+          # The OIDC SP (AZURE_CLIENT_ID) has sre role via raguser_client_ids
+          # Fetch its client secret from Key Vault (stored by Terraform)
+          APP_CLIENT_SECRET=$(az keyvault secret show \
+            --vault-name "$KV_NAME" \
+            --name "EntraApp-ClientSecret" \
+            --query "value" -o tsv)
+
+          # GitHub Actions SP = AZURE_CLIENT_ID = the raguser we assigned sre role to
+          CALLER_CLIENT_ID="${{ secrets.AZURE_CLIENT_ID }}"
+
+          # Get a client secret for the GitHub Actions SP if not already in KV
+          # (Terraform stores the APP secret, not the caller secret)
+          # Use az cli token instead — already authenticated via OIDC
+          TOKEN=$(az account get-access-token \
+            --resource "$APP_CLIENT_ID" \
+            --query accessToken -o tsv 2>/dev/null || echo "")
+
+          if [ -z "$TOKEN" ]; then
+            echo "⚠ az account get-access-token failed — using client credentials"
+            CALLER_SECRET=$(az keyvault secret show \
+              --vault-name "$KV_NAME" \
+              --name "EntraApp-ClientSecret" \
+              --query "value" -o tsv)
+            TOKEN=$(curl -s -X POST \
+              "https://login.microsoftonline.com/${TENANT_ID}/oauth2/v2.0/token" \
+              --data-urlencode "grant_type=client_credentials" \
+              --data-urlencode "client_id=${CALLER_CLIENT_ID}" \
+              --data-urlencode "client_secret=${CALLER_SECRET}" \
+              --data-urlencode "scope=${APP_CLIENT_ID}/.default" \
+              | python3 -c "import sys,json; print(json.load(sys.stdin)['access_token'])")
+          fi
+
+          echo "::add-mask::$TOKEN"
+
+          # Verify roles in token
+          ROLES=$(echo $TOKEN | cut -d. -f2 \
+            | awk '{n=length($0)%4; if(n==2) print $0"=="; else if(n==3) print $0"="; else print $0}' \
+            | base64 -d 2>/dev/null \
+            | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('roles',[]))" \
+            2>/dev/null || echo "[]")
+          echo "Token roles: $ROLES"
+
+          if [[ "$ROLES" != *"sre"* ]]; then
+            echo "❌ Token missing sre role — check raguser_client_ids variable"
+            exit 1
+          fi
+
+          echo "Token valid with sre role ✅"
+
+          # ── Trigger ingestion ──────────────────────────────────────────────
+          echo "Triggering ingestion..."
+          RESPONSE=$(curl -s -w "\n%{http_code}" -X POST "https://$FQDN/ingest" \
+            -H "Authorization: Bearer $TOKEN" \
+            -H "Content-Type: application/json" \
+            -d '{"container":"raw-docs","blob_prefix":"","force_reindex":false}')
+
+          HTTP_CODE=$(echo "$RESPONSE" | tail -1)
+          BODY=$(echo "$RESPONSE" | head -n -1)
+          echo "$BODY" | python3 -m json.tool
+
+          if [ "$HTTP_CODE" != "200" ]; then
+            echo "⚠ Ingest returned HTTP $HTTP_CODE — continuing (no docs uploaded yet is OK)"
+          else
+            STATUS=$(echo "$BODY" | python3 -c "import sys,json; print(json.load(sys.stdin).get('status',''))")
+            INDEXED=$(echo "$BODY" | python3 -c "import sys,json; print(json.load(sys.stdin).get('documents_indexed',0))")
+            echo "Ingest status  : $STATUS"
+            echo "Chunks indexed : $INDEXED"
+            echo "✅ Ingestion complete"
+          fi    
