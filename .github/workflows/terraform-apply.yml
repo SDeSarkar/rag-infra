@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
     inputs:
       container_image:
-        description: "Full ACR image tag to deploy (e.g. agenticragdevq7g5ye.azurecr.io/agent-api:<sha>)"
+        description: "Full ACR image tag to deploy"
         required: false
         default: ""
 
@@ -13,27 +13,26 @@ permissions:
   contents: read
 
 jobs:
-  
   terraform_apply:
     runs-on: ubuntu-latest
     env:
-      ARM_USE_OIDC: "true"
-      ARM_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
-      ARM_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+      ARM_USE_OIDC:        "true"
+      ARM_CLIENT_ID:       ${{ secrets.AZURE_CLIENT_ID }}
+      ARM_TENANT_ID:       ${{ secrets.AZURE_TENANT_ID }}
       ARM_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
-      TF_IN_AUTOMATION: "true"
+      TF_IN_AUTOMATION:    "true"
 
     steps:
       # ── 1. Checkout ────────────────────────────────────────────────────────
       - name: Checkout
         uses: actions/checkout@v4
 
-      # ── 2. Azure Login (OIDC — no client secret needed) ───────────────────
+      # ── 2. Azure Login (OIDC) ──────────────────────────────────────────────
       - name: Azure Login (OIDC)
         uses: azure/login@v2
         with:
-          client-id: ${{ secrets.AZURE_CLIENT_ID }}
-          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          client-id:       ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id:       ${{ secrets.AZURE_TENANT_ID }}
           subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
 
       # ── 3. Setup Terraform ─────────────────────────────────────────────────
@@ -43,7 +42,7 @@ jobs:
           terraform_version: "1.7.5"
           terraform_wrapper: false
 
-      # ── 4. Terraform Init (remote backend) ────────────────────────────────
+      # ── 4. Terraform Init ──────────────────────────────────────────────────
       - name: Terraform Init
         working-directory: terraform
         run: |
@@ -54,8 +53,6 @@ jobs:
             -backend-config="key=${{ github.repository }}-main.tfstate"
 
       # ── 5. Resolve container image ─────────────────────────────────────────
-      # If manually supplied → use it.
-      # If not supplied → read latest from ACR (most recently pushed tag).
       - name: Resolve container image
         id: image
         working-directory: terraform
@@ -65,33 +62,92 @@ jobs:
             echo "Using provided image: $INPUT_IMAGE"
             echo "container_image=$INPUT_IMAGE" >> "$GITHUB_OUTPUT"
           else
-            echo "No image provided — reading acr_login_server from Terraform state..."
-            ACR_LOGIN_SERVER="$(terraform output -raw acr_login_server)"
-            ACR_NAME="$(echo "$ACR_LOGIN_SERVER" | cut -d. -f1)"
-            LATEST_TAG=$(az acr repository show-tags \
-              --name "$ACR_NAME" \
-              --repository agent-api \
-              --orderby time_desc \
-              --top 1 \
-              --output tsv)
-            IMAGE="$ACR_LOGIN_SERVER/agent-api:$LATEST_TAG"
-            echo "Resolved latest image: $IMAGE"
+            ACR_LOGIN_SERVER="$(terraform output -raw acr_login_server 2>/dev/null || echo '')"
+            if [ -n "$ACR_LOGIN_SERVER" ]; then
+              ACR_NAME="$(echo "$ACR_LOGIN_SERVER" | cut -d. -f1)"
+              LATEST_TAG=$(az acr repository show-tags \
+                --name "$ACR_NAME" --repository agent-api \
+                --orderby time_desc --top 1 --output tsv 2>/dev/null || echo "latest")
+              IMAGE="$ACR_LOGIN_SERVER/agent-api:$LATEST_TAG"
+            else
+              IMAGE="nginx:latest"
+            fi
+            echo "Resolved image: $IMAGE"
             echo "container_image=$IMAGE" >> "$GITHUB_OUTPUT"
           fi
 
-      
-      
-      # ── 6. Terraform Plan ──────────────────────────────────────────────────
+      # ── 6. Import existing KV access policies (idempotent) ─────────────────
+      # Prevents "resource already exists" errors on apply
+      - name: Import existing Key Vault access policies
+        working-directory: terraform
+        run: |
+          RG="agentic-rag-dev-rg"
+          SUBSCRIPTION_ID="${{ secrets.AZURE_SUBSCRIPTION_ID }}"
+          ADMIN_OID="${{ vars.TF_ADMIN_OBJECT_IDS }}"
+          IMAGE="${{ steps.image.outputs.container_image }}"
+
+          # ── Resolve KV name ────────────────────────────────────────────────
+          KV_NAME=$(az keyvault list \
+            --resource-group "$RG" \
+            --query "[0].name" -o tsv)
+          echo "Key Vault : $KV_NAME"
+
+          # ── Resolve MI principal ID ────────────────────────────────────────
+          MI_OID=$(az identity show \
+            --name "agentic-rag-dev-api-mi" \
+            --resource-group "$RG" \
+            --query principalId -o tsv 2>/dev/null || echo "")
+          echo "MI OID    : $MI_OID"
+
+          KV_BASE="/subscriptions/${SUBSCRIPTION_ID}/resourceGroups/${RG}/providers/Microsoft.KeyVault/vaults/${KV_NAME}"
+
+          IMPORT_VARS="-var=\"container_image=${IMAGE}\" -var=\"admin_object_ids=[\\\"${ADMIN_OID}\\\"]\""
+
+          # ── Import admin policy ────────────────────────────────────────────
+          ADMIN_STATE_KEY="azurerm_key_vault_access_policy.admins[\"${ADMIN_OID}\"]"
+          if terraform state list 2>/dev/null | grep -qF "$ADMIN_STATE_KEY"; then
+            echo "admins policy already in state ✅"
+          else
+            echo "Importing admins policy..."
+            terraform import \
+              -var="container_image=${IMAGE}" \
+              -var="admin_object_ids=[\"${ADMIN_OID}\"]" \
+              "$ADMIN_STATE_KEY" \
+              "${KV_BASE}/objectId/${ADMIN_OID}" \
+              && echo "admins policy imported ✅" \
+              || echo "admins import failed — may not exist yet, continuing"
+          fi
+
+          # ── Import api_mi policy ───────────────────────────────────────────
+          if [ -n "$MI_OID" ]; then
+            if terraform state list 2>/dev/null | grep -q "azurerm_key_vault_access_policy.api_mi"; then
+              echo "api_mi policy already in state ✅"
+            else
+              echo "Importing api_mi policy..."
+              terraform import \
+                -var="container_image=${IMAGE}" \
+                -var="admin_object_ids=[\"${ADMIN_OID}\"]" \
+                "azurerm_key_vault_access_policy.api_mi" \
+                "${KV_BASE}/objectId/${MI_OID}" \
+                && echo "api_mi policy imported ✅" \
+                || echo "api_mi import failed — may not exist yet, continuing"
+            fi
+          else
+            echo "MI not found yet — api_mi import skipped (will be created fresh)"
+          fi
+
+      # ── 7. Terraform Plan ────────────��─────────────────────────────────────
       - name: Terraform Plan
         working-directory: terraform
         run: |
+          ADMIN_OID="${{ vars.TF_ADMIN_OBJECT_IDS }}"
           terraform plan \
             -var="container_image=${{ steps.image.outputs.container_image }}" \
-            -var='admin_object_ids=["${{ vars.TF_ADMIN_OBJECT_IDS }}"]' \
+            -var="admin_object_ids=[\"${ADMIN_OID}\"]" \
             -out=tfplan \
             -input=false
 
-      # ── 7. Terraform Apply ─────────────────────────────────────────────────
+      # ── 8. Terraform Apply ─────────────────────────────────────────────────
       - name: Terraform Apply
         working-directory: terraform
         run: |
@@ -100,17 +156,14 @@ jobs:
             -auto-approve \
             tfplan
 
-      # ── 8. Print key outputs ──────────────────────────────────────���────────
+      # ── 9. Print key outputs ───────────────────────────────────────────────
       - name: Print Terraform Outputs
         working-directory: terraform
         run: |
           echo "============================================"
-          echo "Container App FQDN:"
-          terraform output -raw container_app_fqdn
-          echo ""
-          echo "ACR Login Server:"
-          terraform output -raw acr_login_server
-          echo ""
-          echo "Image deployed:"
-          echo "${{ steps.image.outputs.container_image }}"
+          echo "Container App FQDN  : $(terraform output -raw container_app_fqdn)"
+          echo "ACR Login Server    : $(terraform output -raw acr_login_server)"
+          echo "Key Vault           : $(terraform output -raw keyvault_name)"
+          echo "App Client ID       : $(terraform output -raw entra_app_client_id)"
+          echo "Image deployed      : ${{ steps.image.outputs.container_image }}"
           echo "============================================"
