@@ -14,11 +14,11 @@ jobs:
       run:
         working-directory: terraform
     env:
-      ARM_USE_OIDC: "true"
-      ARM_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
-      ARM_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+      ARM_USE_OIDC:        "true"
+      ARM_CLIENT_ID:       ${{ secrets.AZURE_CLIENT_ID }}
+      ARM_TENANT_ID:       ${{ secrets.AZURE_TENANT_ID }}
       ARM_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
-      TF_IN_AUTOMATION: "true"
+      TF_IN_AUTOMATION:    "true"
 
     steps:
       - name: Checkout
@@ -27,14 +27,15 @@ jobs:
       - name: Azure Login (OIDC)
         uses: azure/login@v2
         with:
-          client-id: ${{ secrets.AZURE_CLIENT_ID }}
-          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          client-id:       ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id:       ${{ secrets.AZURE_TENANT_ID }}
           subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
 
       - name: Setup Terraform
         uses: hashicorp/setup-terraform@v3
         with:
           terraform_version: "1.7.5"
+          terraform_wrapper: false
 
       - name: Terraform Init
         run: |
@@ -44,33 +45,102 @@ jobs:
             -backend-config="container_name=${{ secrets.TFSTATE_CONTAINER }}" \
             -backend-config="key=${{ github.repository }}-main.tfstate"
 
-      - name: Debug storage.tf in runner
+      # ── Import existing KV access policies (same as terraform-apply.yml) ───
+      - name: Import existing Key Vault access policies
         run: |
-          echo "=== terraform/storage.tf ==="
-          sed -n '1,120p' storage.tf
-          echo "=== occurrences of storage_account_name ==="
-          grep -n "storage_account_name" -n storage.tf || true
+          RG="agentic-rag-dev-rg"
+          SUBSCRIPTION_ID="${{ secrets.AZURE_SUBSCRIPTION_ID }}"
+          ADMIN_OID="${{ vars.TF_ADMIN_OBJECT_IDS }}"
 
-      - name: Terraform Plan (bootstrap with temporary image)
+          KV_NAME=$(az keyvault list \
+            --resource-group "$RG" \
+            --query "[0].name" -o tsv 2>/dev/null || echo "")
+
+          if [ -z "$KV_NAME" ]; then
+            echo "No Key Vault yet — skipping imports (first-time bootstrap)"
+            exit 0
+          fi
+          echo "Key Vault : $KV_NAME"
+
+          KV_BASE="/subscriptions/${SUBSCRIPTION_ID}/resourceGroups/${RG}/providers/Microsoft.KeyVault/vaults/${KV_NAME}"
+
+          # ── Import admins policy ───────────────────────────────────────────
+          if [ -n "$ADMIN_OID" ]; then
+            ADMIN_STATE_KEY="azurerm_key_vault_access_policy.admins[\"${ADMIN_OID}\"]"
+            ADMIN_EXISTS=$(az keyvault show \
+              --name "$KV_NAME" --resource-group "$RG" \
+              --query "properties.accessPolicies[?objectId=='${ADMIN_OID}'].objectId" \
+              -o tsv 2>/dev/null || echo "")
+
+            if [ -n "$ADMIN_EXISTS" ]; then
+              terraform state list 2>/dev/null | grep -qF "$ADMIN_STATE_KEY" \
+                && echo "admins already in state ✅" \
+                || { terraform import \
+                      -var="container_image=nginx:latest" \
+                      -var="admin_object_ids=[\"${ADMIN_OID}\"]" \
+                      "$ADMIN_STATE_KEY" \
+                      "${KV_BASE}/objectId/${ADMIN_OID}" \
+                      && echo "admins imported ✅" \
+                      || echo "admins import failed — continuing"; }
+            else
+              echo "admins policy not in Azure yet — will be created"
+            fi
+          fi
+
+          # ── Import api_mi policy ───────────────────────────────────────────
+          MI_OID=$(az identity show \
+            --name "agentic-rag-dev-api-mi" \
+            --resource-group "$RG" \
+            --query principalId -o tsv 2>/dev/null || echo "")
+
+          if [ -n "$MI_OID" ]; then
+            MI_EXISTS=$(az keyvault show \
+              --name "$KV_NAME" --resource-group "$RG" \
+              --query "properties.accessPolicies[?objectId=='${MI_OID}'].objectId" \
+              -o tsv 2>/dev/null || echo "")
+
+            if [ -n "$MI_EXISTS" ]; then
+              terraform state list 2>/dev/null | grep -q "azurerm_key_vault_access_policy.api_mi" \
+                && echo "api_mi already in state ✅" \
+                || { terraform import \
+                      -var="container_image=nginx:latest" \
+                      -var="admin_object_ids=[\"${ADMIN_OID}\"]" \
+                      "azurerm_key_vault_access_policy.api_mi" \
+                      "${KV_BASE}/objectId/${MI_OID}" \
+                      && echo "api_mi imported ✅" \
+                      || echo "api_mi import failed — continuing"; }
+            else
+              echo "api_mi not in Azure yet — will be created"
+            fi
+          fi
+
+      - name: Terraform Plan (bootstrap)
         run: |
           LOCATION="${{ vars.TF_LOCATION }}"
           PROJECT="${{ vars.TF_PROJECT }}"
           ENVNAME="${{ vars.TF_ENV }}"
+          ADMIN_OID="${{ vars.TF_ADMIN_OBJECT_IDS }}"
+          RAGUSER_IDS="${{ vars.TF_RAGUSER_CLIENT_IDS }}"
 
-          # Fallbacks if repo variables are not defined
-          [ -z "$LOCATION" ] && LOCATION="South India"
-          [ -z "$PROJECT" ] && PROJECT="agentic-rag"
-          [ -z "$ENVNAME" ] && ENVNAME="dev"
+          [ -z "$LOCATION" ]  && LOCATION="South India"
+          [ -z "$PROJECT" ]   && PROJECT="agentic-rag"
+          [ -z "$ENVNAME" ]   && ENVNAME="dev"
+
+          # Build JSON arrays — empty array if var not set
+          [ -n "$ADMIN_OID" ]    && ADMIN_JSON="[\"${ADMIN_OID}\"]"    || ADMIN_JSON="[]"
+          [ -n "$RAGUSER_IDS" ]  && RAGUSER_JSON="[\"${RAGUSER_IDS}\"]" || RAGUSER_JSON="[]"
 
           terraform plan \
             -out=tfplan \
             -var="location=$LOCATION" \
             -var="project=$PROJECT" \
             -var="env=$ENVNAME" \
-            -var="container_image=nginx:latest"      
+            -var="container_image=nginx:latest" \
+            -var="admin_object_ids=${ADMIN_JSON}" \
+            -var="raguser_client_ids=${RAGUSER_JSON}"
 
       - name: Terraform Apply (bootstrap)
         run: terraform apply -auto-approve tfplan
 
-      - name: Show outputs (for debugging)
+      - name: Show outputs
         run: terraform output
