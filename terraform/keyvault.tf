@@ -22,7 +22,6 @@ resource "azurerm_key_vault" "kv" {
 }
 
 # ── Access policy: GitHub Actions OIDC SP ────────────────────────────────────
-# Full access — writes secrets during apply, reads them during ingest workflow
 resource "azurerm_key_vault_access_policy" "tf" {
   key_vault_id = azurerm_key_vault.kv.id
   tenant_id    = data.azurerm_client_config.current.tenant_id
@@ -31,8 +30,19 @@ resource "azurerm_key_vault_access_policy" "tf" {
   secret_permissions = ["Get", "Set", "List", "Delete", "Purge", "Recover"]
 }
 
+# ── Access policy: Human admins ───────────────────────────────────────────────
+resource "azurerm_key_vault_access_policy" "admins" {
+  for_each = toset(var.admin_object_ids)
+
+  key_vault_id = azurerm_key_vault.kv.id
+  tenant_id    = data.azurerm_client_config.current.tenant_id
+  object_id    = each.value
+
+  secret_permissions = ["Get", "Set", "List", "Delete", "Purge", "Recover"]
+  key_permissions    = ["Get", "List"]
+}
+
 # ── Access policy: Container App Managed Identity ─────────────────────────────
-# App reads secrets at runtime (pg password, redis key, openai key)
 resource "azurerm_key_vault_access_policy" "api_mi" {
   key_vault_id = azurerm_key_vault.kv.id
   tenant_id    = data.azurerm_client_config.current.tenant_id
@@ -41,16 +51,11 @@ resource "azurerm_key_vault_access_policy" "api_mi" {
   secret_permissions = ["Get", "List"]
 
   depends_on = [azurerm_key_vault_access_policy.tf]
-}
 
-# ── Access policy: Human admins (YOUR personal OID) ───────────────────────────
-# NOT managed by Terraform — created once manually, never destroyed
-# See: scripts/setup_kv_admin_access.sh
-#
-# az keyvault set-policy \
-#   --name <kv-name> \
-#   --object-id <your-oid> \
-#   --secret-permissions get list set delete
-#
-# This is intentionally outside Terraform lifecycle so terraform destroy
-# does not remove your portal/CLI access to the Key Vault.
+  # ── Prevent "already exists" errors on partial redeploys ─────────────────
+  # If the policy exists in Azure but not in state, import step handles it.
+  # If it exists in both, this is a no-op.
+  lifecycle {
+    ignore_changes = [object_id]
+  }
+}
