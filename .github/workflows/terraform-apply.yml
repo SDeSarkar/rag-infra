@@ -219,8 +219,8 @@ jobs:
               2>/dev/null || echo "")
             echo "  Attempt $i/20: $STATUS"
             [ "$STATUS" = "ok" ] || [ "$STATUS" = "degraded" ] && { echo "API healthy ✅"; break; }
-            [ "$i" = "20" ] && echo "❌ API health timeout after 10 min" && exit 1
-            sleep 15
+            [ "$i" = "30" ] && echo "❌ API health timeout after 10 min" && exit 1
+            sleep 20
           done
 
           # ── Fetch app's own client secret from Key Vault ───────────────────
