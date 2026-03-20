@@ -219,7 +219,7 @@ jobs:
               2>/dev/null || echo "")
             echo "  Attempt $i/20: $STATUS"
             [ "$STATUS" = "ok" ] || [ "$STATUS" = "degraded" ] && { echo "API healthy ✅"; break; }
-            [ "$i" = "20" ] && echo "❌ API health timeout after 5 min" && exit 1
+            [ "$i" = "20" ] && echo "❌ API health timeout after 10 min" && exit 1
             sleep 15
           done
 
