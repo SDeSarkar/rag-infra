@@ -95,3 +95,14 @@ data "azuread_service_principal" "raguser_principals" {
   for_each  = toset(var.raguser_client_ids)
   client_id = each.value
 }
+
+# ── Assign sre role to the app's own SP ──────────────────────────────────────
+# Allows the app to call itself with client_credentials to get a token
+# with sre role — used by CI/CD ingest step and VM scripts
+resource "azuread_app_role_assignment" "api_self_sre" {
+  app_role_id         = "11111111-1111-1111-1111-111111111111"
+  principal_object_id = azuread_service_principal.api.object_id
+  resource_object_id  = azuread_service_principal.api.object_id
+
+  depends_on = [azuread_service_principal.api]
+}
