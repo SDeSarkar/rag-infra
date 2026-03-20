@@ -42,20 +42,4 @@ resource "azurerm_key_vault_access_policy" "admins" {
   key_permissions    = ["Get", "List"]
 }
 
-# ── Access policy: Container App Managed Identity ─────────────────────────────
-resource "azurerm_key_vault_access_policy" "api_mi" {
-  key_vault_id = azurerm_key_vault.kv.id
-  tenant_id    = data.azurerm_client_config.current.tenant_id
-  object_id    = azurerm_user_assigned_identity.api.principal_id
 
-  secret_permissions = ["Get", "List"]
-
-  depends_on = [azurerm_key_vault_access_policy.tf]
-
-  # ── Prevent "already exists" errors on partial redeploys ─────────────────
-  # If the policy exists in Azure but not in state, import step handles it.
-  # If it exists in both, this is a no-op.
-  lifecycle {
-    ignore_changes = [object_id]
-  }
-}
