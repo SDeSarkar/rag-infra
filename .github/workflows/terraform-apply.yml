@@ -77,7 +77,6 @@ jobs:
           fi
 
       # ── 6. Import existing KV access policies (idempotent) ─────────────────
-      # Prevents "resource already exists" errors on apply
       - name: Import existing Key Vault access policies
         working-directory: terraform
         run: |
@@ -86,54 +85,79 @@ jobs:
           ADMIN_OID="${{ vars.TF_ADMIN_OBJECT_IDS }}"
           IMAGE="${{ steps.image.outputs.container_image }}"
 
-          # ── Resolve KV name ────────────────────────────────────────────────
+          # ── Resolve KV name (may not exist yet on first deploy) ────────────
           KV_NAME=$(az keyvault list \
             --resource-group "$RG" \
-            --query "[0].name" -o tsv)
+            --query "[0].name" -o tsv 2>/dev/null || echo "")
+
+          if [ -z "$KV_NAME" ]; then
+            echo "No Key Vault found yet — skipping all imports (fresh deploy)"
+            exit 0
+          fi
           echo "Key Vault : $KV_NAME"
 
-          # ── Resolve MI principal ID ────────────────────────────────────────
+          KV_BASE="/subscriptions/${SUBSCRIPTION_ID}/resourceGroups/${RG}/providers/Microsoft.KeyVault/vaults/${KV_NAME}"
+
+          # ── Import admins policy if it exists in Azure but not in state ────
+          if [ -n "$ADMIN_OID" ]; then
+            ADMIN_STATE_KEY="azurerm_key_vault_access_policy.admins[\"${ADMIN_OID}\"]"
+            ADMIN_EXISTS=$(az keyvault show \
+              --name "$KV_NAME" \
+              --resource-group "$RG" \
+              --query "properties.accessPolicies[?objectId=='${ADMIN_OID}'].objectId" \
+              -o tsv 2>/dev/null || echo "")
+
+            if [ -n "$ADMIN_EXISTS" ]; then
+              if terraform state list 2>/dev/null | grep -qF "$ADMIN_STATE_KEY"; then
+                echo "admins policy already in state ✅"
+              else
+                echo "admins policy exists in Azure but not state — importing..."
+                terraform import \
+                  -var="container_image=${IMAGE}" \
+                  -var="admin_object_ids=[\"${ADMIN_OID}\"]" \
+                  "$ADMIN_STATE_KEY" \
+                  "${KV_BASE}/objectId/${ADMIN_OID}" \
+                  && echo "admins imported ✅" \
+                  || echo "admins import failed — continuing"
+              fi
+            else
+              echo "admins policy not in Azure yet — will be created by apply"
+            fi
+          fi
+
+          # ── Import api_mi policy ONLY if it exists in Azure ────────────────
+          # Check Azure directly — not just state — to catch partial apply leftovers
           MI_OID=$(az identity show \
             --name "agentic-rag-dev-api-mi" \
             --resource-group "$RG" \
             --query principalId -o tsv 2>/dev/null || echo "")
-          echo "MI OID    : $MI_OID"
 
-          KV_BASE="/subscriptions/${SUBSCRIPTION_ID}/resourceGroups/${RG}/providers/Microsoft.KeyVault/vaults/${KV_NAME}"
-
-          IMPORT_VARS="-var=\"container_image=${IMAGE}\" -var=\"admin_object_ids=[\\\"${ADMIN_OID}\\\"]\""
-
-          # ── Import admin policy ────────────────────────────────────────────
-          ADMIN_STATE_KEY="azurerm_key_vault_access_policy.admins[\"${ADMIN_OID}\"]"
-          if terraform state list 2>/dev/null | grep -qF "$ADMIN_STATE_KEY"; then
-            echo "admins policy already in state ✅"
-          else
-            echo "Importing admins policy..."
-            terraform import \
-              -var="container_image=${IMAGE}" \
-              -var="admin_object_ids=[\"${ADMIN_OID}\"]" \
-              "$ADMIN_STATE_KEY" \
-              "${KV_BASE}/objectId/${ADMIN_OID}" \
-              && echo "admins policy imported ✅" \
-              || echo "admins import failed — may not exist yet, continuing"
-          fi
-
-          # ── Import api_mi policy ───────────────────────────────────────────
           if [ -n "$MI_OID" ]; then
-            if terraform state list 2>/dev/null | grep -q "azurerm_key_vault_access_policy.api_mi"; then
-              echo "api_mi policy already in state ✅"
+            echo "MI OID : $MI_OID"
+            MI_POLICY_EXISTS=$(az keyvault show \
+              --name "$KV_NAME" \
+              --resource-group "$RG" \
+              --query "properties.accessPolicies[?objectId=='${MI_OID}'].objectId" \
+              -o tsv 2>/dev/null || echo "")
+
+            if [ -n "$MI_POLICY_EXISTS" ]; then
+              if terraform state list 2>/dev/null | grep -q "azurerm_key_vault_access_policy.api_mi"; then
+                echo "api_mi policy already in state ✅"
+              else
+                echo "api_mi exists in Azure but not state — importing..."
+                terraform import \
+                  -var="container_image=${IMAGE}" \
+                  -var="admin_object_ids=[\"${ADMIN_OID}\"]" \
+                  "azurerm_key_vault_access_policy.api_mi" \
+                  "${KV_BASE}/objectId/${MI_OID}" \
+                  && echo "api_mi imported ✅" \
+                  || echo "api_mi import failed — continuing"
+              fi
             else
-              echo "Importing api_mi policy..."
-              terraform import \
-                -var="container_image=${IMAGE}" \
-                -var="admin_object_ids=[\"${ADMIN_OID}\"]" \
-                "azurerm_key_vault_access_policy.api_mi" \
-                "${KV_BASE}/objectId/${MI_OID}" \
-                && echo "api_mi policy imported ✅" \
-                || echo "api_mi import failed — may not exist yet, continuing"
+              echo "api_mi policy not in Azure yet — will be created by apply ✅"
             fi
           else
-            echo "MI not found yet — api_mi import skipped (will be created fresh)"
+            echo "MI not deployed yet — api_mi will be created fresh by apply ✅"
           fi
 
       # ── 7. Terraform Plan ──────────────────────────────────────────────────
