@@ -199,42 +199,40 @@ jobs:
             sleep 15
           done
 
-          # ── Get token using GitHub Actions OIDC SP ─────────────────────────
-          # The OIDC SP (AZURE_CLIENT_ID) has sre role via raguser_client_ids
-          # Fetch its client secret from Key Vault (stored by Terraform)
+          # ── Fetch app's own client secret from Key Vault ───────────────────
+          # Terraform wrote this secret — app calling itself via client_credentials
+          # self-assignment of sre role is done by azuread_app_role_assignment.api_self_sre
           APP_CLIENT_SECRET=$(az keyvault secret show \
             --vault-name "$KV_NAME" \
             --name "EntraApp-ClientSecret" \
             --query "value" -o tsv)
 
-          # GitHub Actions SP = AZURE_CLIENT_ID = the raguser we assigned sre role to
-          CALLER_CLIENT_ID="${{ secrets.AZURE_CLIENT_ID }}"
+          # ── Wait for Entra role propagation (new deploy = fresh assignment) ─
+          echo "Waiting 30s for Entra role propagation..."
+          sleep 30
 
-          # Get a client secret for the GitHub Actions SP if not already in KV
-          # (Terraform stores the APP secret, not the caller secret)
-          # Use az cli token instead — already authenticated via OIDC
-          TOKEN=$(az account get-access-token \
-            --resource "$APP_CLIENT_ID" \
-            --query accessToken -o tsv 2>/dev/null || echo "")
+          # ── Get token: APP calls itself via client_credentials ─────────────
+          RESPONSE=$(curl -s -X POST \
+            "https://login.microsoftonline.com/${TENANT_ID}/oauth2/v2.0/token" \
+            --data-urlencode "grant_type=client_credentials" \
+            --data-urlencode "client_id=${APP_CLIENT_ID}" \
+            --data-urlencode "client_secret=${APP_CLIENT_SECRET}" \
+            --data-urlencode "scope=${APP_CLIENT_ID}/.default")
 
-          if [ -z "$TOKEN" ]; then
-            echo "⚠ az account get-access-token failed — using client credentials"
-            CALLER_SECRET=$(az keyvault secret show \
-              --vault-name "$KV_NAME" \
-              --name "EntraApp-ClientSecret" \
-              --query "value" -o tsv)
-            TOKEN=$(curl -s -X POST \
-              "https://login.microsoftonline.com/${TENANT_ID}/oauth2/v2.0/token" \
-              --data-urlencode "grant_type=client_credentials" \
-              --data-urlencode "client_id=${CALLER_CLIENT_ID}" \
-              --data-urlencode "client_secret=${CALLER_SECRET}" \
-              --data-urlencode "scope=${APP_CLIENT_ID}/.default" \
-              | python3 -c "import sys,json; print(json.load(sys.stdin)['access_token'])")
+          ERROR=$(echo "$RESPONSE" | python3 -c \
+            "import sys,json; print(json.load(sys.stdin).get('error',''))" 2>/dev/null || echo "")
+          if [ -n "$ERROR" ]; then
+            echo "❌ Token error: $(echo "$RESPONSE" | python3 -c \
+              "import sys,json; print(json.load(sys.stdin).get('error_description',''))")"
+            exit 1
           fi
+
+          TOKEN=$(echo "$RESPONSE" | python3 -c \
+            "import sys,json; print(json.load(sys.stdin)['access_token'])")
 
           echo "::add-mask::$TOKEN"
 
-          # Verify roles in token
+          # ── Verify roles ───────────────────────────────────────────────────
           ROLES=$(echo $TOKEN | cut -d. -f2 \
             | awk '{n=length($0)%4; if(n==2) print $0"=="; else if(n==3) print $0"="; else print $0}' \
             | base64 -d 2>/dev/null \
@@ -243,8 +241,32 @@ jobs:
           echo "Token roles: $ROLES"
 
           if [[ "$ROLES" != *"sre"* ]]; then
-            echo "❌ Token missing sre role — check raguser_client_ids variable"
-            exit 1
+            echo "❌ Token missing sre role — api_self_sre assignment may not have propagated"
+            echo "   Waiting 60s more and retrying..."
+            sleep 60
+
+            # Retry token once
+            TOKEN=$(curl -s -X POST \
+              "https://login.microsoftonline.com/${TENANT_ID}/oauth2/v2.0/token" \
+              --data-urlencode "grant_type=client_credentials" \
+              --data-urlencode "client_id=${APP_CLIENT_ID}" \
+              --data-urlencode "client_secret=${APP_CLIENT_SECRET}" \
+              --data-urlencode "scope=${APP_CLIENT_ID}/.default" \
+              | python3 -c "import sys,json; print(json.load(sys.stdin)['access_token'])")
+
+            echo "::add-mask::$TOKEN"
+
+            ROLES=$(echo $TOKEN | cut -d. -f2 \
+              | awk '{n=length($0)%4; if(n==2) print $0"=="; else if(n==3) print $0"="; else print $0}' \
+              | base64 -d 2>/dev/null \
+              | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('roles',[]))" \
+              2>/dev/null || echo "[]")
+            echo "Token roles (retry): $ROLES"
+
+            if [[ "$ROLES" != *"sre"* ]]; then
+              echo "❌ Still missing sre role after retry — failing"
+              exit 1
+            fi
           fi
 
           echo "Token valid with sre role ✅"
@@ -261,11 +283,10 @@ jobs:
           echo "$BODY" | python3 -m json.tool
 
           if [ "$HTTP_CODE" != "200" ]; then
-            echo "⚠ Ingest returned HTTP $HTTP_CODE — continuing (no docs uploaded yet is OK)"
+            echo "⚠ Ingest returned HTTP $HTTP_CODE — no docs uploaded yet is OK"
           else
-            STATUS=$(echo "$BODY" | python3 -c "import sys,json; print(json.load(sys.stdin).get('status',''))")
-            INDEXED=$(echo "$BODY" | python3 -c "import sys,json; print(json.load(sys.stdin).get('documents_indexed',0))")
-            echo "Ingest status  : $STATUS"
+            INDEXED=$(echo "$BODY" | python3 -c \
+              "import sys,json; print(json.load(sys.stdin).get('documents_indexed',0))")
             echo "Chunks indexed : $INDEXED"
             echo "✅ Ingestion complete"
-          fi    
+          fi
