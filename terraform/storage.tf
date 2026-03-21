@@ -29,3 +29,11 @@ resource "azurerm_storage_container" "etl_artifacts" {
   storage_account_id    = azurerm_storage_account.sa.id
   container_access_type = "private"
 }
+
+# ── RBAC: Human admins — Storage Blob Data Contributor ───────────────────────
+resource "azurerm_role_assignment" "admin_storage" {
+  for_each             = toset(var.admin_object_ids)
+  scope                = azurerm_storage_account.sa.id
+  role_definition_name = "Storage Blob Data Contributor"
+  principal_id         = each.value
+}
