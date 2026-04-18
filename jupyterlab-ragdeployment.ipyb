@@ -1,0 +1,115 @@
+# =================================================================
+# 1. SYSTEM & OLLAMA INSTALLATION (Handles the zstd error)
+# =================================================================
+print("--- Phase 1: Installing System Dependencies ---")
+!apt-get update -y && apt-get install -y zstd
+
+print("\n--- Phase 2: Installing Ollama Engine ---")
+!curl -fsSL https://ollama.com/install.sh | sh
+
+import subprocess
+import time
+import os
+
+# Start Ollama engine in the background
+print("\n--- Phase 3: Starting AI Engine (Llama 3) ---")
+subprocess.Popen(["ollama", "serve"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+time.sleep(15) # Wait for server to initialize
+
+# Download the Llama 3 model (The "Brain")
+!ollama pull llama3
+
+# Install Python libraries for RAG and Agents
+print("\n--- Phase 4: Installing Python Libraries ---")
+!pip install langchain-community chromadb sentence-transformers langchain
+
+from langchain_community.llms import Ollama
+from langchain_community.vectorstores import Chroma
+from langchain_community.embeddings import HuggingFaceEmbeddings
+from langchain_core.documents import Document
+
+# =================================================================
+# 2. AGENTIC KNOWLEDGE BASE (The "RAG" Layer)
+# =================================================================
+print("\n--- Phase 5: Indexing Documents ---")
+
+# These documents simulate the content in the rag-infra 'documents/' folder
+docs = [
+    Document(
+        page_content="SRE RUNBOOK: For Service 500 errors, first check Database connections in the config. If connection is lost, restart the Redis cache and then the Main DB.",
+        metadata={"source": "sre_manual.md"}
+    ),
+    Document(
+        page_content="ENGINEERING DESIGN: The Auth Service uses a Microservices architecture. It relies on JWT tokens for stateless authentication and communicates via gRPC.",
+        metadata={"source": "engineering_design.md"}
+    ),
+    Document(
+        page_content="SLO POLICY: Checkout service must maintain 99.9% availability. Latency should be under 200ms for P95.",
+        metadata={"source": "slos.md"}
+    )
+]
+
+# Create the vector database (ChromaDB)
+embeddings = HuggingFaceEmbeddings(model_name="all-MiniLM-L6-v2")
+vector_db = Chroma.from_documents(docs, embeddings)
+
+# =================================================================
+# 3. AGENT DEFINITIONS (SRE vs Engineering)
+# =================================================================
+llm = Ollama(model="llama3")
+
+def agent_logic(agent_type, user_query):
+    # Retrieve relevant documents from our local "backpack"
+    search_results = vector_db.similarity_search(user_query, k=1)
+    context = search_results[0].page_content if search_results else "No relevant internal documentation found."
+
+    # Define personalities based on the Agent Type
+    if agent_type == "sre":
+        persona = "You are an expert Site Reliability Engineer (SRE). Use the provided documentation to troubleshoot incidents and discuss reliability."
+    else:
+        persona = "You are a Lead Software Engineer. Use the provided documentation to explain architecture, design patterns, and code structure."
+
+    prompt = f"""
+    ROLE: {persona}
+    INTERNAL DOCS: {context}
+    USER QUESTION: {user_query}
+
+    INSTRUCTION: Answer concisely based on the internal docs. If the answer isn't in the docs, use your general knowledge but mention it is not in the manual.
+    ANSWER:
+    """
+    return llm.invoke(prompt)
+
+# =================================================================
+# 4. DEPLOYMENT INTERFACE (The CLI)
+# =================================================================
+print("\n" + "="*50)
+print("🚀 AGENTIC RAG POC DEPLOYED (OPEN SOURCE)")
+print("Model: Llama 3 | Database: ChromaDB | Env: Colab")
+print("="*50)
+
+while True:
+    print("\nSelect the Agent you want to talk to:")
+    print("[1] SRE Agent (Incidents, SLOs, Troubleshooting)")
+    print("[2] Engineering Agent (Architecture, Design, Code)")
+    print("[q] Quit")
+
+    choice = input("\nEnter choice (1/2/q): ").strip().lower()
+
+    if choice == 'q':
+        print("Shutting down POC...")
+        break
+
+    if choice not in ['1', '2']:
+        print("Invalid choice, please select 1 or 2.")
+        continue
+
+    user_msg = input("Enter your question: ")
+
+    agent_key = "sre" if choice == "1" else "engineering"
+    print(f"\n[{agent_key.upper()} AGENT IS THINKING...]")
+
+    response = agent_logic(agent_key, user_msg)
+
+    print(f"\n--- {agent_key.upper()} RESPONSE ---")
+    print(response)
+    print("------------------------------------------")
