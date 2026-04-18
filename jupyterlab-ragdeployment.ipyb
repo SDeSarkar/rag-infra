@@ -20,12 +20,13 @@ time.sleep(15) # Wait for server to initialize
 !ollama pull llama3
 
 # Install Python libraries for RAG and Agents
+# Install Python libraries for RAG and Agents
 print("\n--- Phase 4: Installing Python Libraries ---")
-!pip install langchain-community chromadb sentence-transformers langchain
+!pip install langchain-community chromadb sentence-transformers langchain langchain-huggingface
 
 from langchain_community.llms import Ollama
 from langchain_community.vectorstores import Chroma
-from langchain_community.embeddings import HuggingFaceEmbeddings
+from langchain_huggingface import HuggingFaceEmbeddings  # Updated import
 from langchain_core.documents import Document
 
 # =================================================================
