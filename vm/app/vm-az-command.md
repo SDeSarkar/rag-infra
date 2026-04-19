@@ -117,10 +117,14 @@ Wants=network-online.target
 
 [Service]
 Type=simple
+User=azureuser
+Group=azureuser
+Environment="HOME=/home/azureuser"
 Environment="OLLAMA_HOST=0.0.0.0:11434"
 Environment="OLLAMA_NUM_PARALLEL=1"
 Environment="OLLAMA_MAX_LOADED_MODELS=1"
 Environment="OLLAMA_KEEP_ALIVE=5m"
+WorkingDirectory=/home/azureuser
 ExecStart=/usr/local/bin/ollama serve
 Restart=always
 RestartSec=3
