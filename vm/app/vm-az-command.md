@@ -225,7 +225,8 @@ curl http://localhost:8000/ask \
 
 
 
-🔥 High‑Impact SRE Agent Questions (Incident & Ops)
+###🔥 High‑Impact SRE Agent Questions (Incident & Ops)
+```
 🚨 Incident Response
 
 “We are seeing intermittent 500 errors in prod. What should be checked first?”
@@ -271,3 +272,4 @@ curl http://localhost:8000/ask \
 “What are common causes of VM performance degradation in Azure?”
 “How do we validate network connectivity issues between microservices?”
 “What checks should be done when a load balancer stops routing traffic correctly?”
+```
