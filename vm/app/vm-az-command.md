@@ -157,6 +157,8 @@ or
 LISTEN ... *:11434
 #Test with curl  
 curl http://localhost:11434/api/tags
+# output
+{"models":[{"name":"phi3:mini", ...}]}
 ```
 ### VM‑2 : Agentic RAG API
 ```bash
