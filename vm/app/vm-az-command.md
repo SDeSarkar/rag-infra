@@ -76,6 +76,11 @@ az network nsg rule create \
 ```bash
  sudo lvextend -L +10G /dev/mapper/rootvg-homelv
  sudo xfs_growfs  /home
+ sudo lvextend -L +10G  /dev/mapper/rootvg-rootlv
+ sudo xfs_growfs  /
+ sudo lvextend -L +10G  /dev/mapper/rootvg-tmplv
+ sudo xfs_growfs /tmp
+
 ```
 
 ## deployment commands 
