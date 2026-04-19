@@ -8,7 +8,7 @@ This document provisions a basic Agentic RAG playground infrastructure on Azure 
 ## Resource Group
 
 ```bash
-RG=1-b3298272-playground-sandbox
+RG=1-b3298272-playground-sandbox  ## ( depends on RG in created earlir in environement)
 ```
 ## Virtual Network & Subnet
 
