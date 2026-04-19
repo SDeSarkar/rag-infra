@@ -1,3 +1,8 @@
+import pysqlite3
+import sys
+sys.modules["sqlite3"] = pysqlite3
+
+
 from fastapi import FastAPI
 from pydantic import BaseModel
 from langchain_ollama import OllamaLLM
@@ -44,7 +49,7 @@ else:
 
 llm = OllamaLLM(
     model="phi3:mini",
-    base_url="http://vm-llm-phi3:11434",
+    base_url="http://10.0.1.4:11434",
     temperature=0.3,
 )
 
@@ -75,4 +80,3 @@ Answer concisely.
 """
 
     return {"answer": llm.invoke(prompt)}
-``
