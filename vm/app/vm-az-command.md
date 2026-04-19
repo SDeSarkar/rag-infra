@@ -71,3 +71,9 @@ az network nsg rule create \
   --destination-port-ranges 8000 \
   --access Allow
 ```
+## update FS size for each VM 
+## update FS size vm-rag-api
+`` bash 
+ sudo lvextend -L +10G /dev/mapper/rootvg-homelv
+ sudo xfs_growfs  /home
+```
