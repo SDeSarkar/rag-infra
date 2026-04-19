@@ -1,6 +1,4 @@
 
-RG=1-b3298272-playground-sandbox
-
 # Agentic RAG Azure Infrastructure Setup
 
 This document provisions a basic Agentic RAG playground infrastructure on Azure using Azure CLI.
