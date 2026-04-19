@@ -109,27 +109,21 @@ ollama pull phi3:mini
 ####Ollama systemd service (memory‑safe)
 
 ```bash
-vi /etc/systemd/system/ollama.service
-```
-#### update the file & save
-```bash
+sudo tee /etc/systemd/system/ollama.service << 'EOF'
 [Unit]
 Description=Ollama LLM Runtime
 After=network-online.target
+Wants=network-online.target
 
 [Service]
-ExecStart=/usr/bin/ollama serve
+Type=simple
+ExecStart=/usr/local/bin/ollama serve --host 0.0.0.0
 Restart=always
 RestartSec=3
 
-# Critical limits for 8GB systems
-Environment="OLLAMA_HOST=0.0.0.0:11434"
-Environment="OLLAMA_NUM_PARALLEL=1"
-Environment="OLLAMA_MAX_LOADED_MODELS=1"
-Environment="OLLAMA_KEEP_ALIVE=5m"
-
 [Install]
 WantedBy=multi-user.target
+EOF
 ```
 ### Edit the systemd override (overwrite it)
 ```bash
