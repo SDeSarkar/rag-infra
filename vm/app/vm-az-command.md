@@ -3,8 +3,9 @@
 
 This document provisions a basic Agentic RAG playground infrastructure on Azure using Azure CLI.
 fully functional production-style setup:
-✅ Infrastructure
 ```
+✅ Infrastructure
+
 Azure VMs (2× Standard_D2s_v3)
 Same VNet / subnet
 firewalld + NSG correctly configured
@@ -24,7 +25,7 @@ LangChain + Chroma initialized
 SQLite compatibility handled
 Correct Ollama base_url (private IP)
 /ask endpoint returning real LLM answers ✅
-
+```
 ## Resource Group
 
 ```bash
