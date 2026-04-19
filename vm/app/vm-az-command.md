@@ -73,7 +73,7 @@ az network nsg rule create \
 ```
 ## update FS size for each VM 
 ## update FS size vm-rag-api
-`` bash 
+```bash
  sudo lvextend -L +10G /dev/mapper/rootvg-homelv
  sudo xfs_growfs  /home
 ```
