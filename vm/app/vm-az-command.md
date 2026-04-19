@@ -77,3 +77,46 @@ az network nsg rule create \
  sudo lvextend -L +10G /dev/mapper/rootvg-homelv
  sudo xfs_growfs  /home
 ```
+
+## deployment commands 
+### on VM1 
+```bash
+#Install dependencies
+sudo dnf update -y
+sudo dnf install -y curl zstd
+#Install Ollama
+curl -fsSL https://ollama.com/install.sh | sh
+ollama --version
+#Pull the model
+ollama pull phi3:mini
+```
+####Ollama systemd service (memory‑safe)
+
+```bash
+vi /etc/systemd/system/ollama.service
+```
+#### update the file & save
+```bash
+[Unit]
+Description=Ollama LLM Runtime
+After=network-online.target
+
+[Service]
+ExecStart=/usr/bin/ollama serve
+Restart=always
+RestartSec=3
+
+# Critical limits for 8GB systems
+Environment="OLLAMA_HOST=0.0.0.0:11434"
+Environment="OLLAMA_NUM_PARALLEL=1"
+Environment="OLLAMA_MAX_LOADED_MODELS=1"
+Environment="OLLAMA_KEEP_ALIVE=5m"
+
+[Install]
+WantedBy=multi-user.target
+```
+#### Start Service
+```bash
+sudo systemctl daemon-reload
+sudo systemctl enable --now ollama
+```
