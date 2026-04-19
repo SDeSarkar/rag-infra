@@ -72,6 +72,17 @@ az network nsg rule create \
   --access Allow
 ```
 ## update FS size for each VM 
+### update FS size vm-llm-phi3
+```bash
+ sudo lvextend -L +10G /dev/mapper/rootvg-homelv
+ sudo xfs_growfs  /home
+ sudo lvextend -L +10G  /dev/mapper/rootvg-rootlv
+ sudo xfs_growfs  /
+ sudo lvextend -L +10G  /dev/mapper/rootvg-tmplv
+ sudo xfs_growfs /tmp
+
+```
+
 ### update FS size vm-rag-api
 ```bash
  sudo lvextend -L +10G /dev/mapper/rootvg-homelv
