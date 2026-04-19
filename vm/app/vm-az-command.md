@@ -155,6 +155,8 @@ ss -lntp | grep 11434
 LISTEN ... 0.0.0.0:11434
 or 
 LISTEN ... *:11434
+#Test with curl  
+curl http://localhost:11434/api/tags
 ```
 ### VM‑2 : Agentic RAG API
 ```bash
