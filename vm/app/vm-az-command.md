@@ -12,12 +12,14 @@ RG=1-b3298272-playground-sandbox
 ```
 ## Virtual Network & Subnet
 
+```bash
 az network vnet create \
   --resource-group $RG \
   --name vnet-agentic \
   --address-prefix 10.0.0.0/16 \
   --subnet-name subnet-rag \
   --subnet-prefix 10.0.1.0/24
+```
 
 
 
