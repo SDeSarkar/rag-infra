@@ -120,3 +120,11 @@ WantedBy=multi-user.target
 sudo systemctl daemon-reload
 sudo systemctl enable --now ollama
 ```
+
+### VM‑2 : Agentic RAG API
+```bash
+sudo dnf update -y
+sudo dnf install -y \
+  python3.11 python3.11-devel \
+  gcc gcc-c++ make git
+```
