@@ -131,12 +131,37 @@ Environment="OLLAMA_KEEP_ALIVE=5m"
 [Install]
 WantedBy=multi-user.target
 ```
+### Edit the systemd override (overwrite it)
+```bash
+sudo tee /etc/systemd/system/ollama.service.d/override.conf > /dev/null << 'EOF'
+[Service]
+Environment="HOME=/home/azureuser"
+Environment="OLLAMA_HOST=0.0.0.0"
+EOF
+```
+
+
+
 #### Start Service
 ```bash
 sudo systemctl daemon-reload
 sudo systemctl enable --now ollama
+sudo systemctl stop ollama
+sudo pkill -9 ollama || true
+sudo systemctl daemon-reexec
+sudo systemctl daemon-reload
+sudo systemctl start ollama
 ```
-
+#### VERIFY bind (this is the success gate)
+```bash
+ss -lntp | grep 11434
+```
+### output 
+```bash
+LISTEN ... 0.0.0.0:11434
+or 
+LISTEN ... *:11434
+```
 ### VM‑2 : Agentic RAG API
 ```bash
 sudo dnf update -y
